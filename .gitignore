@@ -219,8 +219,6 @@ __marimo__/
 files/input/*
 files/output/*
 
-!files/*/.gitkeep
-
 scrape.ipynb
 
 chroma_db

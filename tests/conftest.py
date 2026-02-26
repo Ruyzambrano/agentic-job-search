@@ -1,5 +1,5 @@
 from pytest import fixture
-from schema import CandidateProfile, ListRawJobMatch, RawJobMatch, JobAttributes
+from src.schema import CandidateProfile, ListRawJobMatch, RawJobMatch, JobAttributes
 
 
 @fixture

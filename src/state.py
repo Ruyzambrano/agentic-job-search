@@ -3,7 +3,7 @@ from langchain_core.messages import BaseMessage
 from typing import TypedDict, Annotated, Sequence, Optional, List
 from operator import add
 
-from schema import CandidateProfile, ListRawJobMatch, AnalysedJobMatchList
+from src.schema import CandidateProfile, ListRawJobMatch, AnalysedJobMatchList
 
 
 class AgentState(TypedDict):

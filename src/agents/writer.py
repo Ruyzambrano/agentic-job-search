@@ -1,5 +1,4 @@
 """Analyses the returned jobs based on the candidate profile"""
-
 import json
 
 from langchain.agents import create_agent

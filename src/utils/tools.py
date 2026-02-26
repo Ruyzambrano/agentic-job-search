@@ -1,14 +1,10 @@
 """Tools to be used by the agents"""
-
-import pathlib
 from os import environ as ENV
-
 
 from langchain_core.tools import tool
 import serpapi
-from docx import Document
 
-from schema import AnalysedJobMatchList, ListRawJobMatch, RawJobMatch, JobAttributes
+from schema import ListRawJobMatch, RawJobMatch, JobAttributes
 
 
 @tool

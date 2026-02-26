@@ -1,12 +1,12 @@
+"""Researched for jobs using SerpAPI"""
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain_core.rate_limiters import InMemoryRateLimiter
 
-from state import AgentState
-from schema import ListRawJobMatch
-from nodes.utils.tools import scrape_for_jobs
-
+from src.state import AgentState
+from src.schema import ListRawJobMatch
+from utils.tools import scrape_for_jobs
 
 def create_researcher_agent(research_llm):
     """Creates a research agent that can read a cv and get relevant jobs"""

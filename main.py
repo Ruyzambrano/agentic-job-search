@@ -15,11 +15,11 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.messages import HumanMessage
 
-from state import AgentState
+from src.state import AgentState
 from nodes.cv_parser import create_cv_parser_agent
 from nodes.researcher import create_researcher_agent
 from nodes.writer import create_writer_agent
-from graph import create_workflow
+from src.graph import create_workflow
 
 
 def ingest_input_folder(folder_path="files/input"):

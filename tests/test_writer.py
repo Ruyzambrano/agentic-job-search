@@ -1,7 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from schema import RawJobMatch, ListRawJobMatch, AnalysedJobMatch, AnalysedJobMatchList
+from src.schema import RawJobMatch, ListRawJobMatch, AnalysedJobMatch, AnalysedJobMatchList
 from nodes.writer import writer_node
 
 
