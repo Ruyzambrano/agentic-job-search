@@ -1,7 +1,7 @@
 from langchain.agents import create_agent
 
-from state import AgentState
-from schema import CandidateProfile
+from src.state import AgentState
+from src.schema import CandidateProfile
 
 
 def create_cv_parser_agent(cv_parser_llm):

@@ -4,7 +4,7 @@ from os import environ as ENV
 from langchain_core.tools import tool
 import serpapi
 
-from schema import ListRawJobMatch, RawJobMatch, JobAttributes
+from src.schema import ListRawJobMatch, RawJobMatch, JobAttributes
 
 
 @tool

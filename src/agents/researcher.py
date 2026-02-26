@@ -6,7 +6,7 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from src.state import AgentState
 from src.schema import ListRawJobMatch
-from utils.tools import scrape_for_jobs
+from src.utils.tools import scrape_for_jobs
 
 def create_researcher_agent(research_llm):
     """Creates a research agent that can read a cv and get relevant jobs"""

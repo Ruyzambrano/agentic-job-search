@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-from nodes.cv_parser import cv_parser_node
-from nodes.researcher import researcher_node
+from src.agents.cv_parser import cv_parser_node
+from src.agents.researcher import researcher_node
 
 
 def test_cv_parser_node_logic(mock_candidate_profile):

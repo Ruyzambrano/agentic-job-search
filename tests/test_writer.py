@@ -1,11 +1,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from src.schema import RawJobMatch, ListRawJobMatch, AnalysedJobMatch, AnalysedJobMatchList
-from nodes.writer import writer_node
+from src.schema import AnalysedJobMatch, AnalysedJobMatchList
+from src.agents.writer import writer_node
 
 
-@patch("nodes.writer.get_vector_store")
+@patch("src.agents.writer.get_vector_store")
 def test_writer_node_cache_hit(mock_get_db, mock_state):
     mock_db = MagicMock()
 
@@ -38,7 +38,7 @@ def test_writer_node_cache_hit(mock_get_db, mock_state):
     mock_agent.invoke.assert_not_called()
 
 
-@patch("nodes.writer.get_vector_store")
+@patch("src.agents.writer.get_vector_store")
 def test_writer_node_cache_miss(mock_get_db, mock_state):
     mock_db = MagicMock()
     mock_db.get.return_value = {"metadatas": []}  # Simulate empty DB

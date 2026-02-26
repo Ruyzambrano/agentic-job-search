@@ -7,9 +7,9 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from schema import AnalysedJobMatch
-from schema import AnalysedJobMatchList
-from state import AgentState
+from src.schema import AnalysedJobMatch
+from src.schema import AnalysedJobMatchList
+from src.state import AgentState
 
 
 def get_vector_store():

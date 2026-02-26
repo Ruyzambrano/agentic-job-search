@@ -1,6 +1,5 @@
 from unittest.mock import patch
-
-from nodes.utils.tools import scrape_for_jobs
+from src.utils.tools import scrape_for_jobs
 
 
 @patch("serpapi.Client.search")
