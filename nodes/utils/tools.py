@@ -61,4 +61,3 @@ def scrape_for_jobs(
 
         return ListRawJobMatch(jobs=acceptable_jobs)
     return "Could not find any matching jobs"
-

@@ -37,18 +37,20 @@ You have been provided with a structured 'CandidateProfile'. Use the job_title O
         response_format=ListRawJobMatch,
     )
 
+
 def deduplicate_jobs(jobs_list):
     seen_ids = set()
     unique_jobs = []
-    
+
     for job in jobs_list.jobs:
         fingerprint = f"{job.title}-{job.company_name}-{job.location}".lower().strip()
-        
+
         if fingerprint not in seen_ids:
             seen_ids.add(fingerprint)
             unique_jobs.append(job)
-            
+
     return ListRawJobMatch(jobs=unique_jobs)
+
 
 def researcher_node(state: AgentState, agent):
     """Creates the node of the agent for workflows"""
@@ -60,10 +62,5 @@ def researcher_node(state: AgentState, agent):
     ]
     response = agent.invoke({**state, "messages": state["messages"] + new_message})
     clean_data = deduplicate_jobs(response["structured_response"])
-    print(
-        f"Research complete! Found a total of {len(clean_data.jobs)} jobs"
-    )
-    return {
-        "messages": new_message,
-        "research_data": clean_data
-    }
+    print(f"Research complete! Found a total of {len(clean_data.jobs)} jobs")
+    return {"messages": new_message, "research_data": clean_data}

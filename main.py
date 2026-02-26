@@ -21,24 +21,28 @@ from nodes.researcher import create_researcher_agent
 from nodes.writer import create_writer_agent
 from graph import create_workflow
 
+
 def ingest_input_folder(folder_path="files/input"):
     """Reads all supported files and returns a single concatenated string."""
     md = MarkItDown()
     aggregated_text = []
-    
+
     files = glob(path.join(folder_path, "*.*"))
-    
+
     for file_path in files:
         # MarkItDown automatically detects .docx, .pdf, .pptx, .xlsx, etc.
         try:
             print(f"Ingesting with MarkItDown: {path.basename(file_path)}")
             result = md.convert(file_path)
             content = result.text_content
-            aggregated_text.append(f"--- CONTENT FROM {path.basename(file_path)} ---\n{content}")
+            aggregated_text.append(
+                f"--- CONTENT FROM {path.basename(file_path)} ---\n{content}"
+            )
         except Exception as e:
             print(f"Failed to convert {file_path}: {e}")
-                        
+
     return "\n\n".join(aggregated_text)
+
 
 def save_findings_to_docx(state: AgentState):
     """
@@ -134,12 +138,26 @@ def pretty_print_jobs_with_rich(json_string):
 
         table.add_row("Company", job["company"])
         table.add_row("Location", f"{job['location']} ({job['office_days']})")
-        salary_parts = [f"{s:,}" for s in [job.get("salary_min"), job.get("salary_max")] if s is not None]
-        salary_display = f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
+        salary_parts = [
+            f"{s:,}"
+            for s in [job.get("salary_min"), job.get("salary_max")]
+            if s is not None
+        ]
+        salary_display = (
+            f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
+        )
         table.add_row("Salary", salary_display)
-        tech_display = ", ".join(job["tech_stack"]) if isinstance(job["tech_stack"], list) else "N/A"
+        tech_display = (
+            ", ".join(job["tech_stack"])
+            if isinstance(job["tech_stack"], list)
+            else "N/A"
+        )
         table.add_row("Tech Stack", tech_display)
-        attributes_display = " • ".join(job["attributes"]) if isinstance(job["attributes"], list) else "N/A"
+        attributes_display = (
+            " • ".join(job["attributes"])
+            if isinstance(job["attributes"], list)
+            else "N/A"
+        )
         table.add_row("Attributes", attributes_display)
         link_text = f"[link={job['job_url']}]Click to view job listing[/link]"
         table.add_row("Listing", link_text)
@@ -189,11 +207,7 @@ def run_job_matcher(desired_job: str, desired_location: str):
     if desired_location:
         desired_location = f"in {desired_location}"
     content = f"Parse the provided raw cv text and find the best job matches {desired_job} {desired_location}: {raw_context}"
-    state = {
-        "messages": [
-            HumanMessage(content=content)
-        ]
-    }
+    state = {"messages": [HumanMessage(content=content)]}
 
     print("----------- Starting Workflow -----------")
 
