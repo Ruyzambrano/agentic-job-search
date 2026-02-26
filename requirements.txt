@@ -1,0 +1,12 @@
+requests
+python-dotenv
+serpapi
+python-docx
+langchain
+langgraph
+langchain-core
+langchain-community
+langchain-google-genai
+ipykernel
+rich
+markitdown
