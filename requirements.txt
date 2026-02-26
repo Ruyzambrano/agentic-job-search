@@ -7,9 +7,10 @@ langgraph
 langchain-core
 langchain-community
 langchain-google-genai
+langchain-chroma
 ipykernel
 rich
-markitdown
+markitdown[all]
 pytest
 pytest-asyncio
 pytest-mock
