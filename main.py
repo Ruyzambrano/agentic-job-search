@@ -207,8 +207,6 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
 if __name__ == "__main__":
     load_dotenv("alt.env")
-    makedirs("files/input", exist_ok=True)
-    makedirs("files/output", exist_ok=True)
     desired_job = input("What kind of jobs are you looking for today?\n")
     desired_location = input("Where are you looking today?\n")
     run_job_matcher(desired_job, desired_location)
