@@ -2,9 +2,9 @@ from langgraph.graph import StateGraph, START, END
 from functools import partial
 
 from src.state import AgentState
-from agents.cv_parser import cv_parser_node
-from agents.researcher import researcher_node
-from agents.writer import writer_node
+from src.agents.cv_parser import cv_parser_node
+from src.agents.researcher import researcher_node
+from src.agents.writer import writer_node
 
 
 def create_workflow(cv_parser_agent, researcher_agent, writer_agent):

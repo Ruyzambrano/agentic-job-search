@@ -1,29 +1,25 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
-
-
-class JobAttributes(BaseModel):
-    salary: Optional[str] = Field(
-        default="Not specified", description="Salary range if provided"
-    )
-    qualifications: Optional[List[str]] = Field(
-        default=["No qualifications specified"], description="Required skills/degrees"
-    )
-    posted_at: Optional[str] = Field(default="", description="Date posted")
-    schedule_type: Optional[str] = Field(
-        default="", description="Full-time, Contract, etc."
-    )
+from typing import Optional, List, Literal
 
 
 class RawJobMatch(BaseModel):
-    title: str = Field(description="The title of the job listing")
-    company_name: str = Field(
-        description="The name of the company", default="Company not specified"
-    )
-    attributes: JobAttributes
-    description: str = Field(description="The summarised text of the job description")
-    job_url: str = Field(description="The URL of the job listing")
-    location: str = Field(description="Where the job is located")
+    # Core Identity
+    job_url: str = Field(description="The unique URL (Primary Key)")
+    title: str = Field(description="Job title")
+    company_name: str = Field(default="Unknown", description="Company name")
+    location: str = Field(description="Geographic location")
+    
+    salary_min: Optional[int] = Field(default=None, description="Annualized min salary (e.g. 60000)")
+    salary_max: Optional[int] = Field(default=None, description="Annualized max salary (e.g. 80000)")
+    salary_string: str = Field(default="Not specified", description="Raw text (e.g. '£500/day' or 'Competitive')")
+    
+    work_setting: Literal["Remote", "Hybrid", "On-site", "Unknown"] = "Unknown"
+    schedule_type: Optional[str] = Field(default="Unknown", description="Full-time, Part-time, Contract")
+    is_contract: bool = False
+
+    qualifications: List[str] = Field(default_factory=list, description="Extracted tech stack/skills")
+    description: str = Field(description="Summarized job text")
+    posted_at: str = Field(default="", description="Date string from listing")
 
 
 class ListRawJobMatch(BaseModel):

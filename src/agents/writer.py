@@ -4,21 +4,11 @@ import json
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_chroma import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+from src.utils.vector_handler import get_global_jobs_store
 from src.schema import AnalysedJobMatch
 from src.schema import AnalysedJobMatchList
 from src.state import AgentState
-
-
-def get_vector_store():
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
-    return Chroma(
-        collection_name="job_analysis_cache",
-        embedding_function=embeddings,
-        persist_directory="./chroma_db",
-    )
 
 
 def create_writer_agent(writer_llm):
@@ -57,7 +47,7 @@ For every job, you must infer and explain:
 def writer_node(state: AgentState, agent):
     """Analyses jobs against profile with local caching logic."""
     print("Analysing jobs against your profile...")
-    vector_store = get_vector_store()
+    vector_store = get_global_jobs_store()
     research_jobs = state.get("research_data").jobs
 
     final_analyses = []
@@ -65,12 +55,16 @@ def writer_node(state: AgentState, agent):
     new_message_obj = None
 
     for job in research_jobs:
-        existing = vector_store.get(where={"job_url": job.job_url})
+        existing = vector_store.get(ids=[job.job_url])
 
-        if existing and existing.get("metadatas"):
+        if existing and existing.get("metadatas") and len(existing["metadatas"]) > 0:
             print(f"LOG: Cache Hit: {job.title} at {job.company_name}")
-            raw_meta = existing["metadatas"][0]["analysis_json"]
-            final_analyses.append(AnalysedJobMatch(**json.loads(raw_meta)))
+            meta = existing["metadatas"][0]
+            raw_json = meta.get("analysis_json")
+            if raw_json:
+                final_analyses.append(AnalysedJobMatch(**json.loads(raw_json)))
+            else:
+                new_jobs_to_process.append(job)
         else:
             new_jobs_to_process.append(job)
 

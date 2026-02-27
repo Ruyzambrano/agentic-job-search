@@ -1,4 +1,4 @@
-from os import environ as ENV, path, makedirs
+from os import environ as ENV, path
 import json
 from datetime import datetime
 import pathlib
@@ -16,9 +16,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.messages import HumanMessage
 
 from src.state import AgentState
-from nodes.cv_parser import create_cv_parser_agent
-from nodes.researcher import create_researcher_agent
-from nodes.writer import create_writer_agent
+from src.agents.cv_parser import create_cv_parser_agent
+from src.agents.researcher import create_researcher_agent
+from src.agents.writer import create_writer_agent
 from src.graph import create_workflow
 
 
@@ -189,7 +189,7 @@ def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(model=model)
 
 
-def run_job_matcher(desired_job: str, desired_location: str):
+def run_job_matcher(config: dict):
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -202,8 +202,10 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
     raw_context = ingest_input_folder("files/input")
+    desired_job = config.get("configurable", {}).get("role")
     if desired_job:
         desired_job = f"focused on {desired_job}"
+    desired_location = config.get("configurable", {}).get("location")
     if desired_location:
         desired_location = f"in {desired_location}"
     content = f"Parse the provided raw cv text and find the best job matches {desired_job} {desired_location}: {raw_context}"
@@ -211,7 +213,7 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
     print("----------- Starting Workflow -----------")
 
-    state = app.invoke(state)
+    state = app.invoke(input=state, config=config)
 
     print("\n" + "=" * 30)
 
@@ -222,6 +224,7 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
 if __name__ == "__main__":
     load_dotenv()
-    desired_job = input("What kind of jobs are you looking for today?\n")
-    desired_location = input("Where are you looking today?\n")
-    run_job_matcher(desired_job, desired_location)
+    desired_job = input("What job role are you looking for?\n").strip()
+    desired_location = input("Where are you looking today?\n").strip()
+    config = {"configurable": {"user_id": "Ruy001", "location": desired_location, "role": desired_job}}
+    run_job_matcher(config)

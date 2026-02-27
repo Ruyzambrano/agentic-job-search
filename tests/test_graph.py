@@ -20,4 +20,4 @@ def test_scrape_for_jobs_tool(mock_search):
     result = scrape_for_jobs.invoke({"role_keywords": "Python", "location": "London"})
 
     assert result.jobs[0].company_name == "Google"
-    assert result.jobs[0].attributes.salary == "£100,000"
+    assert result.jobs[0].salary_string == "£100,000"

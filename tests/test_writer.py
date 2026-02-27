@@ -5,7 +5,7 @@ from src.schema import AnalysedJobMatch, AnalysedJobMatchList
 from src.agents.writer import writer_node
 
 
-@patch("src.agents.writer.get_vector_store")
+@patch("src.agents.writer.get_global_jobs_store")
 def test_writer_node_cache_hit(mock_get_db, mock_state):
     mock_db = MagicMock()
 
@@ -38,7 +38,7 @@ def test_writer_node_cache_hit(mock_get_db, mock_state):
     mock_agent.invoke.assert_not_called()
 
 
-@patch("src.agents.writer.get_vector_store")
+@patch("src.agents.writer.get_global_jobs_store")
 def test_writer_node_cache_miss(mock_get_db, mock_state):
     mock_db = MagicMock()
     mock_db.get.return_value = {"metadatas": []}  # Simulate empty DB
