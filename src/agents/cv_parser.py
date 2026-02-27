@@ -1,27 +1,10 @@
 """Parses a CV and returns a CandidateProfile while also writing the profile to a DB"""
-import json
-
 from langchain.agents import create_agent
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
 from src.schema import CandidateProfile
-from src.utils.vector_handler import get_user_analysis_store
-
-def save_candidate_profile(user_id: str, profile: CandidateProfile):
-    vector_store = get_user_analysis_store()
-    document_content = f"{profile.summary} Skills: {', '.join(profile.key_skills)}. Roles: {', '.join(profile.job_titles)}"
-    metadata = profile.model_dump()
-
-    for key, value in metadata.items():
-        if isinstance(value, list):
-            metadata[key] = json.dumps(value)
-    
-    vector_store.add_texts(
-        texts=[document_content],
-        metadatas=[metadata],
-        ids=[f"profile_{user_id}"]
-    )
+from src.utils.vector_handler import save_candidate_profile, get_user_analysis_store
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -56,9 +39,13 @@ Return ONLY the JSON object. Do not provide an intro, outro, or explanations."""
 
 def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     """Creates the node of the agent for workflows"""
+
     user_id = config.get("configurable", {}).get("user_id")
     if not user_id:
         raise ValueError("user_id is missing from the configuration. Cannot save profile.")
+    
+    user_store = get_user_analysis_store()
+
     print("Parsing cv...")
     result = agent.invoke(state)
     cv_data = result["structured_response"]
@@ -69,5 +56,8 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     print(f"Key Skills: {cv_data.key_skills}\n")
     print(cv_data.summary, end="\n\n")
     
-    save_candidate_profile(user_id, cv_data)
-    return {"cv_data": cv_data}
+    profile_id = save_candidate_profile(user_store, user_id, cv_data)
+    return {
+            "cv_data": cv_data, 
+            "active_profile_id": profile_id
+        }

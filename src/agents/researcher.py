@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from src.state import AgentState
 from src.schema import ListRawJobMatch, CandidateProfile, RawJobMatch
 from src.utils.tools import scrape_for_jobs
-from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store
+from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store, fetch_candidate_profile, sync_with_global_library
 
 
 def create_researcher_agent(research_llm):
@@ -45,28 +45,25 @@ You have been provided with a structured 'CandidateProfile'. Use the job_title O
 
 def researcher_node(state: AgentState, agent, config: RunnableConfig):
     """Creates the node of the agent for workflows"""
+    user_store = get_user_analysis_store()
+    global_store = get_global_jobs_store()
+    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get("profile_id")
+
+    if not profile_id:
+        raise ValueError("No active profile ID found to research against!")
+    
     user_id = config.get("configurable", {}).get("user_id")
     target_location = config.get("configurable", {}).get("location")
 
     if not user_id:
         raise ValueError("user_id is required in config to fetch profile.")
     
-    print("LOG: Getting Vector metadata")
+    print("LOG: Getting Profile metadata")
 
-    user_store = get_user_analysis_store()
-    profile_record = user_store.get(ids=[f"profile_{user_id}"])
+    profile = fetch_candidate_profile(profile_id, user_store)
     
-    if not profile_record:
-        raise ValueError(f"No profile found for {user_id}. Run CV parser first")
-
-    meta = profile_record["metadatas"][0]
-
-    for field in ["job_titles", "key_skills", "industries"]:
-        if field in meta and isinstance(meta[field], str):
-            meta[field] = json.loads(meta[field])
-    
-    profile = CandidateProfile(**meta)
     search_location = target_location or profile.current_location or "Remote"
+
     print(f"Researching for roles in {search_location}...")
     prompt_content = (
             f"Find jobs in {search_location} for this profile: {profile.summary}. "
@@ -76,32 +73,8 @@ def researcher_node(state: AgentState, agent, config: RunnableConfig):
     response = agent.invoke({**state, "messages": state["messages"] + new_message})
 
     raw_results = response["structured_response"]
-    global_store = get_global_jobs_store()
-    final_jobs = []
-    seen_urls = set()
 
-    for job in raw_results.jobs:
-        if job.job_url not in seen_urls:
-            existing = global_store.get(ids=[job.job_url])
-            seen_urls.add(job.job_url)
-
-            if not existing.get("ids"):
-                global_store.add_texts(
-                    texts=[job.description],
-                    metadatas=[job.model_dump()],
-                    ids=[job.job_url]
-                )
-                final_jobs.append(job)
-                print(f"LOG: New job saved to global library: {job.title}")
-                
-            else:
-                cached_metadata = existing['metadatas'][0]
-                if isinstance(cached_metadata.get("qualifications"), str):
-                    cached_metadata["qualifications"] = json.loads(cached_metadata["qualifications"])
-                
-                cached_job = RawJobMatch(**cached_metadata)
-                final_jobs.append(cached_job)
-                print(f"DEBUG: Using cached global data for: {job.title}")
+    final_jobs = sync_with_global_library(global_store, raw_results)
 
     print(f"Research complete! Found a total of {len(final_jobs)} jobs")
     return {"messages": new_message, "research_data": ListRawJobMatch(jobs=final_jobs)}

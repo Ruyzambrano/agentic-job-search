@@ -15,3 +15,6 @@ pytest
 pytest-asyncio
 pytest-mock
 pytest-icdiff
+streamlit
+altair
+Authlib

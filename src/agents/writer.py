@@ -4,8 +4,9 @@ import json
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_core.runnables import RunnableConfig
 
-from src.utils.vector_handler import get_global_jobs_store
+from src.utils.vector_handler import get_global_jobs_store, check_analysis_cache, get_user_analysis_store
 from src.schema import AnalysedJobMatch
 from src.schema import AnalysedJobMatchList
 from src.state import AgentState
@@ -44,30 +45,18 @@ For every job, you must infer and explain:
     )
 
 
-def writer_node(state: AgentState, agent):
+def writer_node(state: AgentState, agent, config: RunnableConfig):
     """Analyses jobs against profile with local caching logic."""
     print("Analysing jobs against your profile...")
-    vector_store = get_global_jobs_store()
+    global_jobs_store = get_global_jobs_store()
+    user_store = get_user_analysis_store()
     research_jobs = state.get("research_data").jobs
 
-    final_analyses = []
-    new_jobs_to_process = []
     new_message_obj = None
 
-    for job in research_jobs:
-        existing = vector_store.get(ids=[job.job_url])
 
-        if existing and existing.get("metadatas") and len(existing["metadatas"]) > 0:
-            print(f"LOG: Cache Hit: {job.title} at {job.company_name}")
-            meta = existing["metadatas"][0]
-            raw_json = meta.get("analysis_json")
-            if raw_json:
-                final_analyses.append(AnalysedJobMatch(**json.loads(raw_json)))
-            else:
-                new_jobs_to_process.append(job)
-        else:
-            new_jobs_to_process.append(job)
-
+    final_analyses, new_jobs_to_process = check_analysis_cache(global_jobs_store, research_jobs, config.get("configurable", {}).get("user_id"))
+    
     if new_jobs_to_process:
         print(f"LOG: Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
         job_list_context = ""
@@ -85,7 +74,7 @@ def writer_node(state: AgentState, agent):
         )
         llm_results = response["structured_response"].jobs
 
-        vector_store.add_texts(
+        global_jobs_store.add_texts(
             texts=[a.job_summary for a in llm_results],
             metadatas=[
                 {"job_url": a.job_url, "analysis_json": a.model_dump_json()}

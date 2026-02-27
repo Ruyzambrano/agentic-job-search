@@ -11,3 +11,4 @@ class AgentState(TypedDict):
     cv_data: Optional[CandidateProfile]
     research_data: Optional[ListRawJobMatch]
     writer_data: Optional[AnalysedJobMatchList]
+    active_profile_id: str
