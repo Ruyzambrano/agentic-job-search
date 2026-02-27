@@ -6,7 +6,7 @@ from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
-from src.utils.vector_handler import get_global_jobs_store, check_analysis_cache, get_user_analysis_store
+from src.utils.vector_handler import get_global_jobs_store, check_analysis_cache, get_user_analysis_store, fetch_candidate_profile, save_job_analyses
 from src.schema import AnalysedJobMatch
 from src.schema import AnalysedJobMatchList
 from src.state import AgentState
@@ -48,14 +48,21 @@ For every job, you must infer and explain:
 def writer_node(state: AgentState, agent, config: RunnableConfig):
     """Analyses jobs against profile with local caching logic."""
     print("Analysing jobs against your profile...")
+    
     global_jobs_store = get_global_jobs_store()
     user_store = get_user_analysis_store()
+    
+    user_id = config.get("configurable", {}).get("user_id")
+    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get("profile_id")
+    
+    if not profile_id or not user_id:
+        raise ValueError("Missing profile_id or user_id. Cannot perform analysis.")
+    
     research_jobs = state.get("research_data").jobs
-
+   
     new_message_obj = None
 
-
-    final_analyses, new_jobs_to_process = check_analysis_cache(global_jobs_store, research_jobs, config.get("configurable", {}).get("user_id"))
+    final_analyses, new_jobs_to_process = check_analysis_cache(user_store, research_jobs, profile_id)
     
     if new_jobs_to_process:
         print(f"LOG: Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
@@ -74,14 +81,7 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
         )
         llm_results = response["structured_response"].jobs
 
-        global_jobs_store.add_texts(
-            texts=[a.job_summary for a in llm_results],
-            metadatas=[
-                {"job_url": a.job_url, "analysis_json": a.model_dump_json()}
-                for a in llm_results
-            ],
-            ids=[a.job_url for a in llm_results],
-        )
+        save_job_analyses(user_store, llm_results, user_id, profile_id)
         final_analyses.extend(llm_results)
     else:
         print("LOG: 🚀 All jobs retrieved from cache. Zero tokens consumed.")

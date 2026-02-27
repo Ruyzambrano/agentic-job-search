@@ -189,7 +189,7 @@ def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(model=model)
 
 
-def run_job_matcher(config: dict):
+def run_job_matcher(raw_context, config: dict):
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -201,7 +201,7 @@ def run_job_matcher(config: dict):
     writer_agent = create_writer_agent(get_llm_model(ENV.get("WRITER_GEMINI_MODEL")))
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
-    raw_context = ingest_input_folder("files/input")
+    
     desired_job = config.get("configurable", {}).get("role")
     if desired_job:
         desired_job = f"focused on {desired_job}"
@@ -227,4 +227,5 @@ if __name__ == "__main__":
     desired_job = input("What job role are you looking for?\n").strip()
     desired_location = input("Where are you looking today?\n").strip()
     config = {"configurable": {"user_id": "Ruy001", "location": desired_location, "role": desired_job}}
-    run_job_matcher(config)
+    raw_context = ingest_input_folder("files/input")
+    run_job_matcher(raw_context, config)

@@ -19,7 +19,7 @@ def test_db_env():
 
 @fixture
 def mock_config():
-    return  {"configurable": {"user_id": "test_001", "location": "A place", "role": "Theif"}}
+    return  {"configurable": {"user_id": "test_001", "location": "A place", "role": "Theif", "profile_id": "testtest"}}
 
 
 @fixture

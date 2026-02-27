@@ -1,43 +1,65 @@
-import json
 
 import streamlit as st
 
-from markitdown import MarkItDown
-from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store
-from src.utils.streamlit_utils import iso_formatter, display_profile
 
-"""
-View CandidateProfile
+from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store, find_all_roles_for_profile
+from src.utils.streamlit_utils import display_profile, sidebar_handler, filter_for_profiles, display_job_matches
+from main import run_job_matcher
 
-Upload CV
-
-Sidebar - choose profile (if multiple)
-
-Top Job Matches for profile
-
-
-"""
 
 def main_page():
     user_vector_store = get_user_analysis_store()
     global_jobs_store = get_global_jobs_store()
 
-    profiles = user_vector_store.get(ids=[f"profile_Ruy001"]).get("metadatas")
-    with st.sidebar:
-        selected_timestamp = st.selectbox(
-            label="Choose your CV version",
-            options=[m["created_at"] for m in profiles], 
-            format_func=iso_formatter,                     
-            key="cv_selection"                        
-        )
-        new_cv = st.file_uploader("Add a new CV")
-    active_profile_meta = next(m for m in profiles if m["created_at"] == selected_timestamp)
+    user_id = st.user.sub
+
+    new_cv = sidebar_handler()
+    
+    if new_cv:
+        st.success("CV read successfully!")
+        desired_role = st.text_input("Role")
+        desired_location = st.text_input("Location")
+        analyse = st.button("Analyse CV and search for jobs")
+
+        if analyse:
+            with st.spinner("Getting you jobs"):
+                config = {
+                    "configurable": {
+                        "user_id": user_id, 
+                        "location": desired_location, 
+                        "role": desired_role
+                        }
+                    }
+                try:
+                    run_job_matcher(st.session_state["raw_cv_text"], config)
+                except Exception as e:
+                    st.error(str(e))
+                finally:
+                    new_cv = None
+    try:
+        active_profile_meta = filter_for_profiles(user_vector_store, user_id)
+
+    except ValueError:
+        if not new_cv:
+            st.write("# Upload a CV to begin.")
+            st.stop()
+    
+    new_run = st.sidebar.button("Find jobs for the current profile")
+
+    if new_run:
+        # TODO
+        st.balloons()
+
     display_profile(profile=active_profile_meta)
 
-    if new_cv:
-        writer = MarkItDown()
-        st.write(writer.convert(new_cv))
-
+    jobs = find_all_roles_for_profile(user_vector_store, active_profile_meta.get("profile_id"))
+    
+    if jobs:
+        st.header("Matched Jobs")
+        display_job_matches(jobs)
+    st.write(jobs)
+    st.write(user_id)
+    st.write(active_profile_meta.get("profile_id"))
 
 if __name__ == "__main__":
     main_page()
