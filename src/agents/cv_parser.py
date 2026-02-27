@@ -1,8 +1,27 @@
-from langchain.agents import create_agent
-from langchain.agents.middleware import ToolCallLimitMiddleware
+"""Parses a CV and returns a CandidateProfile while also writing the profile to a DB"""
+import json
 
-from state import AgentState
-from schema import CandidateProfile
+from langchain.agents import create_agent
+from langchain_core.runnables import RunnableConfig
+
+from src.state import AgentState
+from src.schema import CandidateProfile
+from src.utils.vector_handler import get_user_analysis_store
+
+def save_candidate_profile(user_id: str, profile: CandidateProfile):
+    vector_store = get_user_analysis_store()
+    document_content = f"{profile.summary} Skills: {', '.join(profile.key_skills)}. Roles: {', '.join(profile.job_titles)}"
+    metadata = profile.model_dump()
+
+    for key, value in metadata.items():
+        if isinstance(value, list):
+            metadata[key] = json.dumps(value)
+    
+    vector_store.add_texts(
+        texts=[document_content],
+        metadatas=[metadata],
+        ids=[f"profile_{user_id}"]
+    )
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -35,14 +54,20 @@ Return ONLY the JSON object. Do not provide an intro, outro, or explanations."""
     )
 
 
-def cv_parser_node(state: AgentState, agent):
+def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     """Creates the node of the agent for workflows"""
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        raise ValueError("user_id is missing from the configuration. Cannot save profile.")
     print("Parsing cv...")
     result = agent.invoke(state)
     cv_data = result["structured_response"]
+
     print("Parsing complete!")
     print("\nCandidate info:")
     print(f"Name: {cv_data.full_name}")
     print(f"Key Skills: {cv_data.key_skills}\n")
     print(cv_data.summary, end="\n\n")
+    
+    save_candidate_profile(user_id, cv_data)
     return {"cv_data": cv_data}

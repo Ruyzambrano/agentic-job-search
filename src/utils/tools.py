@@ -1,15 +1,25 @@
 """Tools to be used by the agents"""
-
-import pathlib
 from os import environ as ENV
-
 
 from langchain_core.tools import tool
 import serpapi
-from docx import Document
 
-from schema import AnalysedJobMatchList, ListRawJobMatch, RawJobMatch, JobAttributes
+from src.schema import ListRawJobMatch, RawJobMatch
 
+
+def extract_best_url(job_result: dict | None) -> str:
+    if not job_result or not isinstance(job_result, dict):
+        return "Not specified"
+        
+    apply_options = job_result.get("apply_options")
+    
+    if isinstance(apply_options, list) and len(apply_options) > 0:
+        # Get safely from the first dict
+        first_link = apply_options[0].get("link")
+        if first_link:
+            return first_link
+            
+    return job_result.get("link") or "Not specified"
 
 @tool
 def scrape_for_jobs(
@@ -42,23 +52,21 @@ def scrape_for_jobs(
             )
             if isinstance(qualifications, str):
                 qualifications = [qualifications]
-            parsed_attributes = JobAttributes(
-                salary=extensions.get("salary", ""),
-                qualifications=qualifications,
-                posted_at=extensions.get("posted_at", ""),
-                schedule_type=extensions.get("schedule_type"),
-            )
+            
             parsed_job = RawJobMatch(
                 title=job.get("title", "No title given"),
                 company_name=job.get("company_name", "No name given"),
-                attributes=parsed_attributes,
                 description=job.get("description", "No description given"),
-                job_url=job.get("share_link", ""),
+                job_url=extract_best_url(job),
                 location=job.get("location", ""),
+                salary_string=extensions.get("salary", ""),
+                schedule_type=extensions.get("schedule_type"),
+                qualifications=qualifications,
+                posted_at=extensions.get("posted_at", "")
+
             )
             if parsed_job.title and parsed_job.description:
                 acceptable_jobs.append(parsed_job)
 
         return ListRawJobMatch(jobs=acceptable_jobs)
     return "Could not find any matching jobs"
-

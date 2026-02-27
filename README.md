@@ -71,6 +71,8 @@ pip install -r requirements.txt
 
 Create an `.env` file in the root directory with your keys for `GOOGLE_API_KEY` and `SERPAPI_KEY`.
 
+_Note: I made an `alt.env` file to use when I run out of Gemini credits_ 
+
 ### 3. Running Tests
 
 We use `pytest` with `pytest-mock` to verify agent logic without consuming API credits:

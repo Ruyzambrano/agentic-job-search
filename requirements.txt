@@ -14,3 +14,4 @@ markitdown[all]
 pytest
 pytest-asyncio
 pytest-mock
+pytest-icdiff

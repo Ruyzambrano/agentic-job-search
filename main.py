@@ -1,4 +1,4 @@
-from os import environ as ENV, path, makedirs
+from os import environ as ENV, path
 import json
 from datetime import datetime
 import pathlib
@@ -15,30 +15,34 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.messages import HumanMessage
 
-from state import AgentState
-from nodes.cv_parser import create_cv_parser_agent
-from nodes.researcher import create_researcher_agent
-from nodes.writer import create_writer_agent
-from graph import create_workflow
+from src.state import AgentState
+from src.agents.cv_parser import create_cv_parser_agent
+from src.agents.researcher import create_researcher_agent
+from src.agents.writer import create_writer_agent
+from src.graph import create_workflow
+
 
 def ingest_input_folder(folder_path="files/input"):
     """Reads all supported files and returns a single concatenated string."""
     md = MarkItDown()
     aggregated_text = []
-    
+
     files = glob(path.join(folder_path, "*.*"))
-    
+
     for file_path in files:
         # MarkItDown automatically detects .docx, .pdf, .pptx, .xlsx, etc.
         try:
             print(f"Ingesting with MarkItDown: {path.basename(file_path)}")
             result = md.convert(file_path)
             content = result.text_content
-            aggregated_text.append(f"--- CONTENT FROM {path.basename(file_path)} ---\n{content}")
+            aggregated_text.append(
+                f"--- CONTENT FROM {path.basename(file_path)} ---\n{content}"
+            )
         except Exception as e:
             print(f"Failed to convert {file_path}: {e}")
-                        
+
     return "\n\n".join(aggregated_text)
+
 
 def save_findings_to_docx(state: AgentState):
     """
@@ -134,12 +138,26 @@ def pretty_print_jobs_with_rich(json_string):
 
         table.add_row("Company", job["company"])
         table.add_row("Location", f"{job['location']} ({job['office_days']})")
-        salary_parts = [f"{s:,}" for s in [job.get("salary_min"), job.get("salary_max")] if s is not None]
-        salary_display = f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
+        salary_parts = [
+            f"{s:,}"
+            for s in [job.get("salary_min"), job.get("salary_max")]
+            if s is not None
+        ]
+        salary_display = (
+            f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
+        )
         table.add_row("Salary", salary_display)
-        tech_display = ", ".join(job["tech_stack"]) if isinstance(job["tech_stack"], list) else "N/A"
+        tech_display = (
+            ", ".join(job["tech_stack"])
+            if isinstance(job["tech_stack"], list)
+            else "N/A"
+        )
         table.add_row("Tech Stack", tech_display)
-        attributes_display = " • ".join(job["attributes"]) if isinstance(job["attributes"], list) else "N/A"
+        attributes_display = (
+            " • ".join(job["attributes"])
+            if isinstance(job["attributes"], list)
+            else "N/A"
+        )
         table.add_row("Attributes", attributes_display)
         link_text = f"[link={job['job_url']}]Click to view job listing[/link]"
         table.add_row("Listing", link_text)
@@ -171,7 +189,7 @@ def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(model=model)
 
 
-def run_job_matcher(desired_job: str, desired_location: str):
+def run_job_matcher(config: dict):
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -184,20 +202,18 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
     raw_context = ingest_input_folder("files/input")
+    desired_job = config.get("configurable", {}).get("role")
     if desired_job:
         desired_job = f"focused on {desired_job}"
+    desired_location = config.get("configurable", {}).get("location")
     if desired_location:
         desired_location = f"in {desired_location}"
     content = f"Parse the provided raw cv text and find the best job matches {desired_job} {desired_location}: {raw_context}"
-    state = {
-        "messages": [
-            HumanMessage(content=content)
-        ]
-    }
+    state = {"messages": [HumanMessage(content=content)]}
 
     print("----------- Starting Workflow -----------")
 
-    state = app.invoke(state)
+    state = app.invoke(input=state, config=config)
 
     print("\n" + "=" * 30)
 
@@ -207,7 +223,8 @@ def run_job_matcher(desired_job: str, desired_location: str):
 
 
 if __name__ == "__main__":
-    load_dotenv("alt.env")
-    desired_job = input("What kind of jobs are you looking for today?\n")
-    desired_location = input("Where are you looking today?\n")
-    run_job_matcher(desired_job, desired_location)
+    load_dotenv()
+    desired_job = input("What job role are you looking for?\n").strip()
+    desired_location = input("Where are you looking today?\n").strip()
+    config = {"configurable": {"user_id": "Ruy001", "location": desired_location, "role": desired_job}}
+    run_job_matcher(config)
