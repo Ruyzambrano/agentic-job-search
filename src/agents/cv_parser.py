@@ -5,6 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from src.state import AgentState
 from src.schema import CandidateProfile
 from src.utils.vector_handler import save_candidate_profile, get_user_analysis_store
+from src.utils.func import log_message
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -46,11 +47,11 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     
     user_store = get_user_analysis_store()
 
-    print("Parsing cv...")
+    log_message("Parsing cv...")
     result = agent.invoke(state)
     cv_data = result["structured_response"]
 
-    print("Parsing complete!")
+    log_message("Parsing complete!")
     print("\nCandidate info:")
     print(f"Name: {cv_data.full_name}")
     print(f"Key Skills: {cv_data.key_skills}\n")

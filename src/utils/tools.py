@@ -14,7 +14,6 @@ def extract_best_url(job_result: dict | None) -> str:
     apply_options = job_result.get("apply_options")
     
     if isinstance(apply_options, list) and len(apply_options) > 0:
-        # Get safely from the first dict
         first_link = apply_options[0].get("link")
         if first_link:
             return first_link
@@ -28,7 +27,7 @@ def scrape_for_jobs(
     """Uses the SerpAPI to get a list of jobs"""
     location = location.lower().replace("uk", "united kingdom")
     print(
-        f"LOG: Searching for {role_keywords} roles in {location} within {distance} miles/km"
+        f"Searching for {role_keywords} roles in {location} within {distance} miles/km"
     )
     client = serpapi.Client(api_key=ENV.get("SERPAPI_KEY"))
     results = client.search(
@@ -43,7 +42,7 @@ def scrape_for_jobs(
     )
 
     if "jobs_results" in results:
-        print(f"LOG: Found {len(results["jobs_results"])} {role_keywords} jobs!")
+        print(f"Found {len(results["jobs_results"])} {role_keywords} jobs!")
         acceptable_jobs = []
         for job in results.get("jobs_results", []):
             extensions = job.get("detected_extensions", {})

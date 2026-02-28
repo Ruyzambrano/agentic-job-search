@@ -1,15 +1,13 @@
 """Analyses the returned jobs based on the candidate profile"""
-import json
-
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
-from src.utils.vector_handler import get_global_jobs_store, check_analysis_cache, get_user_analysis_store, fetch_candidate_profile, save_job_analyses
-from src.schema import AnalysedJobMatch
+from src.utils.vector_handler import check_analysis_cache, get_user_analysis_store, save_job_analyses
 from src.schema import AnalysedJobMatchList
 from src.state import AgentState
+from src.utils.func import log_message
 
 
 def create_writer_agent(writer_llm):
@@ -47,9 +45,8 @@ For every job, you must infer and explain:
 
 def writer_node(state: AgentState, agent, config: RunnableConfig):
     """Analyses jobs against profile with local caching logic."""
-    print("Analysing jobs against your profile...")
+    log_message("Analysing jobs against your profile...")
     
-    global_jobs_store = get_global_jobs_store()
     user_store = get_user_analysis_store()
     
     user_id = config.get("configurable", {}).get("user_id")
@@ -65,7 +62,7 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
     final_analyses, new_jobs_to_process = check_analysis_cache(user_store, research_jobs, profile_id)
     
     if new_jobs_to_process:
-        print(f"LOG: Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
+        log_message(f"Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
         job_list_context = ""
 
         for i, job in enumerate(new_jobs_to_process):
@@ -84,9 +81,9 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
         save_job_analyses(user_store, llm_results, user_id, profile_id)
         final_analyses.extend(llm_results)
     else:
-        print("LOG: 🚀 All jobs retrieved from cache. Zero tokens consumed.")
+        log_message("🚀 All jobs retrieved from cache. Zero tokens consumed.")
 
-    print("Analysis complete!")
+    log_message("Analysis complete!")
 
     return {
         "messages": [new_message_obj] if new_message_obj else [],

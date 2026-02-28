@@ -8,10 +8,10 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
-from src.schema import ListRawJobMatch, CandidateProfile, RawJobMatch
+from src.schema import ListRawJobMatch
 from src.utils.tools import scrape_for_jobs
 from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store, fetch_candidate_profile, sync_with_global_library
-
+from src.utils.func import log_message
 
 def create_researcher_agent(research_llm):
     """Creates a research agent that can read a cv and get relevant jobs"""
@@ -60,13 +60,13 @@ def researcher_node(state: AgentState, agent, config: RunnableConfig):
     if not user_id:
         raise ValueError("user_id is required in config to fetch profile.")
     
-    print("LOG: Getting Profile metadata")
+    log_message("Getting Profile metadata")
 
     profile = fetch_candidate_profile(profile_id, user_store)
     
     search_location = target_location or profile.current_location or "Remote"
 
-    print(f"Researching for roles in {search_location}...")
+    log_message(f"Researching for roles in {search_location}...")
     prompt_content = (
             f"Find jobs in {search_location} for this profile: {profile.summary}. "
             f"Target roles: {target_roles} {profile.job_titles}. Skills: {profile.key_skills}."
@@ -78,5 +78,5 @@ def researcher_node(state: AgentState, agent, config: RunnableConfig):
 
     final_jobs = sync_with_global_library(global_store, raw_results)
 
-    print(f"Research complete! Found a total of {len(final_jobs)} jobs")
+    log_message(f"Research complete! Found a total of {len(final_jobs)} jobs")
     return {"messages": new_message, "research_data": ListRawJobMatch(jobs=final_jobs)}

@@ -15,7 +15,7 @@ if __name__ =="__main__":
     pages = {
         "Your Job Search": [
             st.Page(page="pages/home.py", title="Home", default=True),
-            st.Page(page="pages/page1.py", title="Page 1 Placeholder"),
+            st.Page(page="pages/page1.py", title="Upload a new CV"),
             st.Page(page="pages/page2.py", title="Page 2 Placeholder"),
             st.Page(page="pages/page3.py", title="Page 3 Placeholder")
         ],

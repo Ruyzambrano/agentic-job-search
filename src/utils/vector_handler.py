@@ -6,6 +6,7 @@ from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from src.schema import CandidateProfile, AnalysedJobMatch, RawJobMatch
+from src.utils.func import log_message
 
 def get_embeddings():
     return GoogleGenerativeAIEmbeddings(model=ENV.get("EMBEDDING_MODEL"))
@@ -71,7 +72,7 @@ def check_analysis_cache(store, jobs: list[RawJobMatch], profile_id: str):
         existing = store.get(ids=[cache_id]) 
         
         if existing and existing.get("metadatas"):
-            print(f"LOG: Cache Hit: {job.title} at {job.company_name}")
+            log_message(f"Cache Hit: {job.title} at {job.company_name}")
             raw_json = existing["metadatas"][0].get("analysis_json")
             hits.append(AnalysedJobMatch(**loads(raw_json)))
         else:
@@ -95,7 +96,7 @@ def sync_with_global_library(global_store, raw_results):
                     ids=[job.job_url]
                 )
                 final_jobs.append(job)
-                print(f"LOG: New job saved to global library: {job.title}")
+                log_message(f"New job saved to global library: {job.title}")
                 
             else:
                 cached_metadata = existing['metadatas'][0]
@@ -104,7 +105,7 @@ def sync_with_global_library(global_store, raw_results):
                 
                 cached_job = RawJobMatch(**cached_metadata)
                 final_jobs.append(cached_job)
-                print(f"DEBUG: Using cached global data for: {job.title}")
+                log_message(f"Using cached global data for: {job.title}")
     return final_jobs
 
 def save_job_analyses(user_store, jobs: list[AnalysedJobMatch], user_id, profile_id):
