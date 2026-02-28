@@ -4,7 +4,7 @@ from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
 from src.schema import CandidateProfile
-from src.utils.vector_handler import save_candidate_profile, get_user_analysis_store
+from src.utils.vector_handler import save_candidate_profile, get_user_analysis_store, fetch_candidate_profile
 from src.utils.func import log_message
 
 
@@ -47,6 +47,16 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     
     user_store = get_user_analysis_store()
 
+    existing_profile_id = config.get("configurable", {}).get("active_profile_id")
+
+    if existing_profile_id:
+        cv_data = fetch_candidate_profile(existing_profile_id, user_store)
+        
+        return {
+            "cv_data": cv_data, 
+            "active_profile_id": existing_profile_id
+        }
+    
     log_message("Parsing cv...")
     result = agent.invoke(state)
     cv_data = result["structured_response"]

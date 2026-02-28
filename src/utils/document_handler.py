@@ -2,6 +2,7 @@ from glob import glob
 from os import path
 from datetime import datetime
 import pathlib
+from io import BytesIO
 
 from markitdown import MarkItDown
 from docx import Document
@@ -45,7 +46,7 @@ def save_findings_to_docx(state: AgentState) -> str:
 
         analysed_jobs = state["writer_data"]
         file_name = f"{timestamp}_{candidate}_job_research.docx"
-        log_message(f"Writing Analysis to {file_name}")
+        print(f"Writing Analysis to {file_name}")
         doc = Document()
         doc.add_heading("Top Job Matches & Analysis", 0)
 
@@ -82,9 +83,10 @@ def save_findings_to_docx(state: AgentState) -> str:
         files_dir = pathlib.Path("files/output")
         files_dir.mkdir(parents=True, exist_ok=True)
         file_path = files_dir / file_name
-        doc.save(file_path)
-
-        return f"Successfully saved findings to {file_path}"
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
 
     except Exception as e:
         return f"Error saving docx: {str(e)}"

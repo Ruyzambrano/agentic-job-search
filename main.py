@@ -9,9 +9,10 @@ from src.agents.writer import create_writer_agent
 from src.graph import create_workflow
 from src.utils.document_handler import ingest_input_folder, save_findings_to_docx
 from src.utils.func import pretty_print_jobs_with_rich, log_message, get_llm_model
+from src.state import AgentState
 
 
-def run_job_matcher(raw_context, config: dict):
+def run_job_matcher(raw_context, config: dict) -> AgentState:
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -40,6 +41,7 @@ def run_job_matcher(raw_context, config: dict):
     print(save_findings_to_docx(state))
     pretty_print_jobs_with_rich(state["writer_data"].model_dump_json())
     log_message("SUCCESS: WORKFLOW COMPLETE")
+    return state
 
 
 if __name__ == "__main__":

@@ -1,12 +1,15 @@
 from datetime import datetime
-import tempfile
 from os import remove
+import tempfile
 
+from langchain_core.runnables import RunnableConfig
 from markitdown import MarkItDown
 import streamlit as st
 
 from src.schema import AnalysedJobMatch
-from src.utils.vector_handler import find_all_candidate_profiles
+from main import run_job_matcher
+from src.utils.vector_handler import find_all_candidate_profiles, get_global_jobs_store, get_user_analysis_store, find_all_roles_for_profile
+from src.utils.document_handler import save_findings_to_docx
 
 def login_screen():
     st.button("Log in with Google", on_click=st.login)
@@ -34,6 +37,18 @@ def display_profile(profile: dict):
         with st.expander(label="## Industries", expanded=False):
             st.write(f"- {"\n- ".join(profile.get("industries"))}")
 
+def upload_file(file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.name}") as tmp_file:
+        tmp_file.write(file.getvalue())
+        tmp_path = tmp_file.name
+    md = MarkItDown()
+    result = md.convert(tmp_path)
+    file_text = result.text_content
+
+    remove(tmp_path)
+
+    return file_text
+
 def sidebar_handler():
     with st.sidebar:
         st.header("📄 CV Management")
@@ -41,17 +56,8 @@ def sidebar_handler():
         if new_cv:
             try:
                 with st.spinner("Converting CV to text..."):
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{new_cv.name}") as tmp_file:
-                        tmp_file.write(new_cv.getvalue())
-                        tmp_path = tmp_file.name
+                    st.session_state["raw_cv_text"] = get_cv_text(new_cv)
                     
-                    md = MarkItDown()
-                    result = md.convert(tmp_path)
-                    cv_text = result.text_content
-
-                    remove(tmp_path)
-
-                    st.session_state["raw_cv_text"] = cv_text
             except Exception as e:
                 st.error(f"Failed to convert CV: {e}")
         return new_cv
@@ -95,3 +101,47 @@ def format_salary_as_range(salary_min: int, salary_max:int):
     if salary_min:
         return f"{salary_min}"
     return "Salary not specified"
+
+
+def process_new_cv(desired_role: str, desired_location:str):
+    analyse = st.button("Analyse CV and search for jobs")
+
+    if analyse:
+        with st.status("Getting you jobs"):
+            config = {
+                "configurable": {
+                    "user_id": st.user.sub, 
+                    "location": desired_location, 
+                    "role": desired_role
+                    }
+                }
+            try:
+                return get_job_analysis(st.session_state["raw_cv_text"], config)
+                
+            except Exception as e:
+                st.error(str(e))
+
+
+@st.cache_data(show_spinner=False)
+def get_job_analysis(cv_text, config):
+    return run_job_matcher(cv_text, config)
+
+@st.cache_data(show_spinner=False)
+def generate_docx(state):
+    return save_findings_to_docx(state)
+
+st.cache_data(show_spinner=False)
+def get_cv_text(uploaded_file):
+    return upload_file(uploaded_file)
+
+@st.cache_resource
+def get_cached_user_store():
+    return get_user_analysis_store()
+
+@st.cache_resource
+def get_cached_global_store():
+    return get_global_jobs_store()
+
+@st.cache_data(show_spinner="Fetching matched jobs...")
+def get_cached_jobs(_store, profile_id):
+    return find_all_roles_for_profile(_store, profile_id)
