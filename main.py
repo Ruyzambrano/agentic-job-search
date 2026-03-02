@@ -1,4 +1,6 @@
 from os import environ as ENV
+from logging import basicConfig
+import asyncio
 
 from dotenv import load_dotenv
 from langchain.messages import HumanMessage
@@ -12,7 +14,8 @@ from src.utils.func import pretty_print_jobs_with_rich, log_message, get_llm_mod
 from src.state import AgentState
 
 
-def run_job_matcher(raw_context, config: dict) -> AgentState:
+async def run_job_matcher(raw_context, config: dict) -> AgentState:
+    basicConfig(level='INFO')
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -25,18 +28,12 @@ def run_job_matcher(raw_context, config: dict) -> AgentState:
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
     
-    desired_job = config.get("configurable", {}).get("role")
-    if desired_job:
-        desired_job = f"focused on {desired_job}"
-    desired_location = config.get("configurable", {}).get("location")
-    if desired_location:
-        desired_location = f"in {desired_location}"
-    content = f"Parse the provided raw cv text and find the best job matches {desired_job} {desired_location}: {raw_context}"
+    content = f"Parse the provided raw cv text: {raw_context}"
     state = {"messages": [HumanMessage(content=content)]}
 
     log_message("Starting Workflow")
 
-    state = app.invoke(input=state, config=config)
+    state = await app.ainvoke(input=state, config=config)
 
     print(save_findings_to_docx(state))
     pretty_print_jobs_with_rich(state["writer_data"].model_dump_json())

@@ -67,7 +67,7 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     print(f"Key Skills: {cv_data.key_skills}\n")
     print(cv_data.summary, end="\n\n")
     
-    profile_id = save_candidate_profile(user_store, user_id, cv_data)
+    profile_id = save_candidate_profile(user_store, user_id, cv_data, config)
     return {
             "cv_data": cv_data, 
             "active_profile_id": profile_id

@@ -1,11 +1,18 @@
 from os import environ as ENV, path
 
+from unittest.mock import MagicMock
 from pytest import fixture
 from shutil import rmtree
 
 from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_store
-from src.schema import CandidateProfile, ListRawJobMatch, RawJobMatch
+from src.schema import CandidateProfile, ListRawJobMatch, RawJobMatch, AnalysedJobMatchWithMeta
 
+@fixture
+def mock_chroma_store():
+    store = MagicMock()
+    # Mock the .get method to return empty by default
+    store.get.return_value = {"ids": [], "metadatas": []}
+    return store
 
 @fixture(autouse=True)
 def test_db_env():
@@ -36,6 +43,14 @@ def mock_python_dev_raw_match():
         qualifications=["something"],
         posted_at="Yesterday"
     )
+
+@fixture
+def mock_agent(mock_candidate_profile):
+    agent = MagicMock()
+    agent.invoke.return_value = {
+        "structured_response": mock_candidate_profile
+    }
+    return agent
 
 
 @fixture
@@ -123,3 +138,13 @@ def mock_vector_candidate_profile():
 def url_test_case(request):
     """Fixture providing a tuple of (input_data, expected_output)"""
     return request.param
+
+@fixture
+def mock_analysed_job_match_with_meta():
+    return AnalysedJobMatchWithMeta(
+        title="Python Dev", company="Tech Co", job_url="url_1",
+        top_applicant_score=90, top_applicant_reasoning="Match",
+        target_role="Dev", target_location="London", job_summary="t", location="hjad", qualifications=["Degree"], 
+        attributes=["Remote"], 
+        tech_stack=["Python"]
+    )

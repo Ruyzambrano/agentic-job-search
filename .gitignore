@@ -219,6 +219,6 @@ __marimo__/
 files/input/*
 files/output/*
 
-scrape.ipynb
+*.ipynb
 
 chroma_db

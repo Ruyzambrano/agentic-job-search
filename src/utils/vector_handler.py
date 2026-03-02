@@ -1,11 +1,13 @@
 from os import environ as ENV
-from datetime import datetime
+from datetime import datetime, timedelta
 from json import loads, dumps
+from typing import List
 
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_core.runnables import RunnableConfig
 
-from src.schema import CandidateProfile, AnalysedJobMatch, RawJobMatch
+from src.schema import CandidateProfile, AnalysedJobMatchWithMeta, RawJobMatch, ListRawJobMatch
 from src.utils.func import log_message
 
 def get_embeddings():
@@ -28,10 +30,10 @@ def get_user_analysis_store():
     )
 
 
-def save_candidate_profile(store, user_id: str, profile: CandidateProfile):
+def save_candidate_profile(store, user_id: str, profile: CandidateProfile, config: RunnableConfig):
     timestamp_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     profile_id = f"profile_{user_id}_{timestamp_id}"
-    
+
     document_content = (
         f"{profile.summary} "
         f"Skills: {', '.join(profile.key_skills)}. "
@@ -74,48 +76,79 @@ def check_analysis_cache(store, jobs: list[RawJobMatch], profile_id: str):
         if existing and existing.get("metadatas"):
             log_message(f"Cache Hit: {job.title} at {job.company_name}")
             raw_json = existing["metadatas"][0].get("analysis_json")
-            hits.append(AnalysedJobMatch(**loads(raw_json)))
+            hits.append(AnalysedJobMatchWithMeta(**loads(raw_json)))
         else:
             misses.append(job)
     return hits, misses
 
+def is_cache_expired(metadata: dict, ttl_days: int) -> bool:
+    """Checks if the stored record has outlived its TTL."""
+    last_synced = metadata.get("last_synced_at")
+    if not last_synced:
+        return True
+    
+    expiry_date = datetime.fromisoformat(last_synced) + timedelta(days=ttl_days)
+    return datetime.now() > expiry_date
 
-def sync_with_global_library(global_store, raw_results):
+def prepare_for_storage(job: RawJobMatch) -> dict:
+    """Ensures metadata is DB-ready with a fresh timestamp."""
+    meta = job.model_dump()
+    meta["last_synced_at"] = datetime.now().isoformat()
+    return meta
+
+def parse_cached_meta(metadata: dict) -> RawJobMatch:
+    """Reconstructs Pydantic model, handling JSON string conversions."""
+    list_fields = ["qualifications", "tech_stack", "attributes"]
+    for field in list_fields:
+        if isinstance(metadata.get(field), str):
+            metadata[field] = loads(metadata[field])
+    return RawJobMatch(**metadata)
+
+def sync_with_global_library(global_store, raw_results: ListRawJobMatch, ttl_days: int = 7) -> List[RawJobMatch]:
     final_jobs = []
-    seen_urls = set()
-
+    seen_identifiers = set() 
+    log_message(f"Syncing {len(raw_results.jobs)} roles with Global Library")
     for job in raw_results.jobs:
-        if job.job_url not in seen_urls:
-            existing = global_store.get(ids=[job.job_url])
-            seen_urls.add(job.job_url)
+        unique_key = f"{job.job_url}_{job.title}"
+        if unique_key in seen_identifiers:
+            continue
+        seen_identifiers.add(unique_key)
 
-            if not existing.get("ids"):
+        res = global_store.get(ids=[job.job_url])
+        existing_meta = res['metadatas'][0] if res.get('ids') else None
+
+        if not existing_meta or is_cache_expired(existing_meta, ttl_days):
+            try:
                 global_store.add_texts(
                     texts=[job.description],
-                    metadatas=[job.model_dump()],
+                    metadatas=[prepare_for_storage(job)],
                     ids=[job.job_url]
                 )
                 final_jobs.append(job)
-                log_message(f"New job saved to global library: {job.title}")
-                
-            else:
-                cached_metadata = existing['metadatas'][0]
-                if isinstance(cached_metadata.get("qualifications"), str):
-                    cached_metadata["qualifications"] = loads(cached_metadata["qualifications"])
-                
-                cached_job = RawJobMatch(**cached_metadata)
-                final_jobs.append(cached_job)
-                log_message(f"Using cached global data for: {job.title}")
+                status = "✨ Updated" if existing_meta else "🆕 New"
+                log_message(f"{status}: {job.title}")
+            except Exception as e:
+                log_message(f"❌ Storage Error ({job.title}): {e}")
+                final_jobs.append(job)
+        else:
+            try:
+                final_jobs.append(parse_cached_meta(existing_meta))
+                log_message(f"📦 Cached: {job.title}")
+            except Exception:
+                final_jobs.append(job) 
     return final_jobs
 
-def save_job_analyses(user_store, jobs: list[AnalysedJobMatch], user_id, profile_id):
+def save_job_analyses(user_store, jobs: list[AnalysedJobMatchWithMeta], user_id, profile_id):
     """Saves personalized analysis to the vector store."""
     user_store.add_texts(
         texts=[a.top_applicant_reasoning for a in jobs],
         metadatas=[{
             "user_id": user_id,
             "profile_id": profile_id,
-            "analysis_json": a.model_dump_json()
+            "analysed_at": a.analysed_at.isoformat() if hasattr(a.analysed_at, 'isoformat') else str(a.analysed_at),
+            "analysis_json": a.model_dump_json(),
+            "target_role": a.target_role,
+            "target_location": a.target_location
         } for a in jobs],
         ids=[f"{profile_id}_{a.job_url}" for a in jobs]
     )
@@ -156,8 +189,29 @@ def find_all_roles_for_profile(jobs_store, profile_id):
     for meta in results.get("metadatas", []):
         if "analysis_json" in meta:
             job_dict = loads(meta["analysis_json"])
-            matches.append(AnalysedJobMatch(**job_dict))
+            matches.append(AnalysedJobMatchWithMeta(**job_dict))
             
     matches.sort(key=lambda x: x.top_applicant_score, reverse=True)
     
     return matches
+
+def find_all_roles_for_user(jobs_store, user_id, sort_by: str="top_applicant_score", reverse: bool=True):
+    results = jobs_store.get(
+        where={"user_id": user_id}
+    )
+    matches = []
+    
+    for meta in results.get("metadatas", []):
+        if "analysis_json" in meta:
+            job_dict = loads(meta["analysis_json"])
+            matches.append(AnalysedJobMatchWithMeta(**job_dict))
+            
+    matches.sort(key=lambda x: getattr(x, sort_by), reverse=reverse)
+    
+    return matches
+
+def fetch_raw_job_data(global_store, job_url) -> RawJobMatch:
+    result = global_store.get(
+        ids=[job_url]
+    )
+    return RawJobMatch(**result.get("metadatas")[0])

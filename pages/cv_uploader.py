@@ -9,12 +9,17 @@ from src.utils.streamlit_utils import process_new_cv, sidebar_handler, display_p
 new_cv = sidebar_handler()
 
 if new_cv:
-    st.success("CV read successfully!")
-    desired_role = st.text_input("Role")
-    desired_location = st.text_input("Location")
-    st.session_state["job_analysis"] = process_new_cv(desired_role, desired_location)
+    with st.sidebar:
+        st.success("CV read successfully!")
+        st.session_state.desired_role = st.text_input(label="Desired Role", placeholder="A Role Like 'Data Engineer'") or "Data Engineer"
+        st.session_state.desired_location = st.text_input(label="Desired Location", placeholder="A Location Like 'London'") or "London"
+
+        st.session_state["job_analysis"] = process_new_cv(st.session_state.desired_role, st.session_state.desired_location)
+    st.title("Your CV")
+    st.write(st.session_state.raw_cv_text)
 
     if st.session_state.get("job_analysis"):
+        st.session_state.raw_cv_text = ""
         buffer = save_findings_to_docx(st.session_state["job_analysis"])
         if isinstance(buffer, BytesIO):
             st.download_button(
@@ -27,4 +32,4 @@ if new_cv:
             st.error(f"Could not prepare download: {buffer}")
         display_profile(st.session_state["job_analysis"].get("cv_data").model_dump())
         st.write("## Matched Jobs")
-        display_job_matches(st.session_state["job_analysis"].get("writer_data").jobs)
+        display_job_matches(st.session_state["job_analysis"].get("writer_data").jobs, True)

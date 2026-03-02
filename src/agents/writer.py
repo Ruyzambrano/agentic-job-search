@@ -5,34 +5,35 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
 from src.utils.vector_handler import check_analysis_cache, get_user_analysis_store, save_job_analyses
-from src.schema import AnalysedJobMatchList
+from src.schema import AnalysedJobMatchListWithMeta, AnalysedJobMatchList, AnalysedJobMatchWithMeta
 from src.state import AgentState
 from src.utils.func import log_message
 
 
 def create_writer_agent(writer_llm):
     """Creates a writer agent"""
-    system_prompt = """You are an Expert Career Advisor and Placement Specialist.
-Your task is to take a list of job openings and a Candidate Profile, then analyze the 'fit' for each role.
+    system_prompt = """You are a Critical Recruitment Auditor. Your task is to perform a high-fidelity "Gap Analysis" between a Candidate Profile and a list of job openings.
 
-### YOUR INPUTS
-1. **Candidate Profile**: A structured summary of the user's skills and experience.
-2. **Job List**: A raw list of scraped job openings in London.
+### YOUR MANDATE
+1. ANALYZE EVERY JOB: You must return an analysis for EVERY job provided in the input list. Do not truncate the list. Do not focus only on the "best" ones.
+2. BE HYPER-CRITICAL: Your Match Score must be conservative. A 95%+ score should be reserved for candidates who meet 100% of the tech stack AND seniority requirements. 
+3. DETECT OVER-QUALIFICATION/UNDER-QUALIFICATION: If a candidate has 10 years of experience and the job is "Junior," the score should be LOW due to "Retention Risk."
 
 ### ANALYSIS CRITERIA
-For every job, you must infer and explain:
-- **The "Why"**: Why does this candidate's specific background make them a top 1% fit for this role?
-- **The "Gap"**: What specific skills or experiences is the candidate missing for this role? Be honest but constructive.
-- **Match Score**: A percentage (0-100%) based on skills, seniority, and location.
-
-### YOUR OUTPUTS
-- You MUST return an 'AnalsedJobMatchList'
+For every job, provide:
+- The "Why": Specific evidence from the profile that matches the job requirements.
+- The "Gap": Explicitly list missing technologies, industry experience, or seniority mismatches. If a skill isn't in the profile, assume they DON'T have it.
+- Match Score: 
+    * 85-100%: Perfect tech stack match, correct seniority, industry alignment.
+    * 60-84%: Strong match but missing 1-2 secondary tools or slightly different industry background.
+    * 0-59%: Missing core "Must-Have" tech stack or significant seniority mismatch.
 
 ### OUTPUT RULES
-- You MUST return your analysis in the 'AnalysedJobMatchList' format.
-- Focus on the Top 5 most relevant roles.
-- Use professional, encouraging, yet data-driven language.
-- DO NOT invent details about the company that aren't in the job description."""
+- Use the 'AnalysedJobMatchList' format.
+- Tone: Clinical, objective, and realistic. 
+- Stop being encouraging. Be accurate. If a candidate is a bad fit, say so and provide a low score.
+- Ensure the 'job_url' in your output matches the input EXACTLY."""
+
     writer_llm.rate_limiter = InMemoryRateLimiter(
         requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
     )
@@ -68,18 +69,28 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
         for i, job in enumerate(new_jobs_to_process):
             job_list_context += f"\nNEW JOB #{i+1}:\n{job.model_dump_json()}"
 
+        expected_count = len(new_jobs_to_process)
         new_message_obj = HumanMessage(
-            content=f"Analyse these NEW jobs: {job_list_context}\n\n"
-            f"Return the structured list. CRITICAL: Use the EXACT 'URL' provided."
+            content=(
+                f"There are {expected_count} NEW jobs to analyse. "
+                f"You MUST return an analysis for EVERY SINGLE ONE ({expected_count} total). "
+                f"Data: {job_list_context}"
+            )
         )
 
         response = agent.invoke(
             {**state, "messages": state["messages"] + [new_message_obj]}
         )
         llm_results = response["structured_response"].jobs
+        
+        jobs_with_meta = [AnalysedJobMatchWithMeta(
+            **job.model_dump(),
+            target_role=config.get("configurable", {}).get("role"),
+            target_location=config.get("configurable", {}).get("location")
+        ) for job in llm_results]
 
-        save_job_analyses(user_store, llm_results, user_id, profile_id)
-        final_analyses.extend(llm_results)
+        save_job_analyses(user_store, jobs_with_meta, user_id, profile_id)
+        final_analyses.extend(jobs_with_meta)
     else:
         log_message("🚀 All jobs retrieved from cache. Zero tokens consumed.")
 
@@ -87,5 +98,5 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
 
     return {
         "messages": [new_message_obj] if new_message_obj else [],
-        "writer_data": AnalysedJobMatchList(jobs=final_analyses),
+        "writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses),
     }

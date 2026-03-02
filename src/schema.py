@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
@@ -24,7 +25,6 @@ class RawJobMatch(BaseModel):
 
 class ListRawJobMatch(BaseModel):
     jobs: List[RawJobMatch] = Field("A list of raw job match objects")
-
 
 class AnalysedJobMatch(BaseModel):
     title: str = Field(
@@ -64,9 +64,16 @@ class AnalysedJobMatch(BaseModel):
         description="A rationale why the candidate fits the role"
     )
 
+class AnalysedJobMatchWithMeta(AnalysedJobMatch):
+    analysed_at: Optional[str] = Field(description="Timestamp of analysis", default_factory=lambda: datetime.now().isoformat(),)
+    target_role: Optional[str] = Field(description="The role that the agent was prioritising", default="")
+    target_location: Optional[str] = Field(description="The location the agent was prioritising", default="")
 
 class AnalysedJobMatchList(BaseModel):
     jobs: List[AnalysedJobMatch] = Field(description="A list of job matches")
+
+class AnalysedJobMatchListWithMeta(BaseModel):
+    jobs: List[AnalysedJobMatchWithMeta] = Field(description="A list of job matches with metada")
 
 
 class CandidateProfile(BaseModel):

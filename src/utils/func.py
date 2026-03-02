@@ -2,6 +2,7 @@ import logging
 import json
 
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -15,13 +16,13 @@ def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
 
 def log_message(message: str):
     """Logs message to terminal or to streamlit depending on context"""
-    if st.runtime.exists():
-        try:
-            st.write(message)
-        except Exception as e:
-            logging.error(str(e))
-            logging.info(f"Errored on: {message}")
     logging.info(message)
+    ctx = get_script_run_ctx(True)
+    if ctx:
+        try:
+            st.write(message) 
+        except Exception:
+            pass
 
 
 def pretty_print_jobs_with_rich(json_string):
