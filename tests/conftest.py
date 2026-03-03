@@ -1,10 +1,52 @@
 from os import environ as ENV, path
 
+from unittest.mock import MagicMock, patch
 from pytest import fixture
 from shutil import rmtree
 
 from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_store
-from src.schema import CandidateProfile, ListRawJobMatch, RawJobMatch
+from src.schema import (
+    CandidateProfile,
+    ListRawJobMatch,
+    RawJobMatch,
+    AnalysedJobMatchWithMeta,
+    SearchQueryPlan
+)
+
+@fixture
+def mock_streamlit(monkeypatch):
+    mock_session = {}
+    mock_secrets = {}
+    # We use monkeypatch to replace the real streamlit attributes
+    monkeypatch.setattr("streamlit.session_state", mock_session)
+    monkeypatch.setattr("streamlit.secrets", mock_secrets)
+    return mock_session, mock_secrets
+
+@fixture
+def mock_env(monkeypatch):
+    mock_env_dict = {}
+    # Replace your ENV object with this dict
+    monkeypatch.setattr("your_module.ENV", mock_env_dict)
+    return mock_env_dict
+
+@fixture
+def mock_search_query_plan():
+    return SearchQueryPlan(
+        queries=["Data Engineer", "Python Developer"],
+        reasoning="Because"
+    )
+
+@fixture(autouse=True)
+def mock_streamlit_secrets(monkeypatch):
+    mock_secrets = {}
+    monkeypatch.setattr("streamlit.secrets", mock_secrets)
+    return mock_secrets
+
+@fixture
+def mock_chroma_store():
+    store = MagicMock()
+    store.get.return_value = {"ids": [], "metadatas": []}
+    return store
 
 
 @fixture(autouse=True)
@@ -18,8 +60,21 @@ def test_db_env():
         rmtree("./test_chroma_db")
 
 @fixture
+def mock_env(monkeypatch):
+    mock_env_dict = {}
+    monkeypatch.setattr("src.utils.func.ENV", mock_env_dict)
+    return mock_env_dict
+
+@fixture
 def mock_config():
-    return  {"configurable": {"user_id": "test_001", "location": "A place", "role": "Theif"}}
+    return {
+        "configurable": {
+            "user_id": "test_001",
+            "location": "A place",
+            "role": "Theif",
+            "profile_id": "testtest",
+        }
+    }
 
 
 @fixture
@@ -34,8 +89,15 @@ def mock_python_dev_raw_match():
         salary_string="Alot",
         schedule_type="Full-time",
         qualifications=["something"],
-        posted_at="Yesterday"
+        posted_at="Yesterday",
     )
+
+
+@fixture
+def mock_agent(mock_candidate_profile):
+    agent = MagicMock()
+    agent.invoke.return_value = {"structured_response": mock_candidate_profile}
+    return agent
 
 
 @fixture
@@ -97,29 +159,65 @@ def mock_raw_jobs():
         ]
     )
 
+
 @fixture
 def mock_vector_candidate_profile():
     return {
         "ids": ["profile_test_001"],
-        "metadatas": [{
-            "full_name": "Ruy",
-            "job_titles": '["Dev"]',
-            "key_skills": '["Python"]',
-            "years_of_experience": "5",
-            "industries": '[]',
-            "summary": "Expert",
-            "current_location": "London",
-            "work_preference": "Remote"
-        }]
+        "metadatas": [
+            {
+                "full_name": "Ruy",
+                "job_titles": '["Dev"]',
+                "key_skills": '["Python"]',
+                "years_of_experience": "5",
+                "industries": "[]",
+                "summary": "Expert",
+                "current_location": "London",
+                "work_preference": "Remote",
+            }
+        ],
     }
 
-@fixture(params=[
-    ({"link": "https://google.com/search", "apply_options": [{"link": "https://direct.com"}]}, "https://direct.com"),    
-    ({"link": "https://google.com/search", "apply_options": []}, "https://google.com/search"),    
-    ({"link": "https://google.com/search"}, "https://google.com/search"),
-    ({"link": "https://google.com/search", "apply_options": None}, "https://google.com/search"),
-    ({}, "Not specified"),
-])
+
+@fixture(
+    params=[
+        (
+            {
+                "link": "https://google.com/search",
+                "apply_options": [{"link": "https://direct.com"}],
+            },
+            "https://direct.com",
+        ),
+        (
+            {"link": "https://google.com/search", "apply_options": []},
+            "https://google.com/search",
+        ),
+        ({"link": "https://google.com/search"}, "https://google.com/search"),
+        (
+            {"link": "https://google.com/search", "apply_options": None},
+            "https://google.com/search",
+        ),
+        ({}, "Not specified"),
+    ]
+)
 def url_test_case(request):
     """Fixture providing a tuple of (input_data, expected_output)"""
     return request.param
+
+
+@fixture
+def mock_analysed_job_match_with_meta():
+    return AnalysedJobMatchWithMeta(
+        title="Python Dev",
+        company="Tech Co",
+        job_url="url_1",
+        top_applicant_score=90,
+        top_applicant_reasoning="Match",
+        target_role="Dev",
+        target_location="London",
+        job_summary="t",
+        location="hjad",
+        qualifications=["Degree"],
+        attributes=["Remote"],
+        tech_stack=["Python"],
+    )
