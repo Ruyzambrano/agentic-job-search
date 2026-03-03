@@ -21,4 +21,4 @@ Authlib
 streamlit-tags
 pytest-asyncio
 respx
-rapid-fuzz
+rapidfuzz
