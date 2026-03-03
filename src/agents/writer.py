@@ -1,11 +1,20 @@
 """Analyses the returned jobs based on the candidate profile"""
+
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
-from src.utils.vector_handler import check_analysis_cache, get_user_analysis_store, save_job_analyses
-from src.schema import AnalysedJobMatchListWithMeta, AnalysedJobMatchList, AnalysedJobMatchWithMeta
+from src.utils.vector_handler import (
+    check_analysis_cache,
+    get_user_analysis_store,
+    save_job_analyses,
+)
+from src.schema import (
+    AnalysedJobMatchListWithMeta,
+    AnalysedJobMatchList,
+    AnalysedJobMatchWithMeta,
+)
 from src.state import AgentState
 from src.utils.func import log_message
 
@@ -47,21 +56,25 @@ For every job, provide:
 def writer_node(state: AgentState, agent, config: RunnableConfig):
     """Analyses jobs against profile with local caching logic."""
     log_message("Analysing jobs against your profile...")
-    
+
     user_store = get_user_analysis_store()
-    
+
     user_id = config.get("configurable", {}).get("user_id")
-    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get("profile_id")
-    
+    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get(
+        "profile_id"
+    )
+
     if not profile_id or not user_id:
         raise ValueError("Missing profile_id or user_id. Cannot perform analysis.")
-    
+
     research_jobs = state.get("research_data").jobs
-   
+
     new_message_obj = None
 
-    final_analyses, new_jobs_to_process = check_analysis_cache(user_store, research_jobs, profile_id)
-    
+    final_analyses, new_jobs_to_process = check_analysis_cache(
+        user_store, research_jobs, profile_id
+    )
+
     if new_jobs_to_process:
         log_message(f"Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
         job_list_context = ""
@@ -82,12 +95,15 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
             {**state, "messages": state["messages"] + [new_message_obj]}
         )
         llm_results = response["structured_response"].jobs
-        
-        jobs_with_meta = [AnalysedJobMatchWithMeta(
-            **job.model_dump(),
-            target_role=config.get("configurable", {}).get("role"),
-            target_location=config.get("configurable", {}).get("location")
-        ) for job in llm_results]
+
+        jobs_with_meta = [
+            AnalysedJobMatchWithMeta(
+                **job.model_dump(),
+                target_role=config.get("configurable", {}).get("role"),
+                target_location=config.get("configurable", {}).get("location"),
+            )
+            for job in llm_results
+        ]
 
         save_job_analyses(user_store, jobs_with_meta, user_id, profile_id)
         final_analyses.extend(jobs_with_meta)

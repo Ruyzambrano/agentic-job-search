@@ -10,6 +10,7 @@ from docx import Document
 from src.state import AgentState
 from src.utils.func import log_message
 
+
 def ingest_input_folder(folder_path="files/input"):
     """Reads all supported files and returns a single concatenated string."""
     md = MarkItDown()
@@ -30,6 +31,7 @@ def ingest_input_folder(folder_path="files/input"):
             log_message(f"Failed to convert {file_path}: {e}")
 
     return "\n\n".join(aggregated_text)
+
 
 def save_findings_to_docx(state: AgentState) -> str:
     """

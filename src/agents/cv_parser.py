@@ -1,10 +1,15 @@
 """Parses a CV and returns a CandidateProfile while also writing the profile to a DB"""
+
 from langchain.agents import create_agent
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
 from src.schema import CandidateProfile
-from src.utils.vector_handler import save_candidate_profile, get_user_analysis_store, fetch_candidate_profile
+from src.utils.vector_handler import (
+    save_candidate_profile,
+    get_user_analysis_store,
+    fetch_candidate_profile,
+)
 from src.utils.func import log_message
 
 
@@ -43,20 +48,19 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
 
     user_id = config.get("configurable", {}).get("user_id")
     if not user_id:
-        raise ValueError("user_id is missing from the configuration. Cannot save profile.")
-    
+        raise ValueError(
+            "user_id is missing from the configuration. Cannot save profile."
+        )
+
     user_store = get_user_analysis_store()
 
     existing_profile_id = config.get("configurable", {}).get("active_profile_id")
 
     if existing_profile_id:
         cv_data = fetch_candidate_profile(existing_profile_id, user_store)
-        
-        return {
-            "cv_data": cv_data, 
-            "active_profile_id": existing_profile_id
-        }
-    
+
+        return {"cv_data": cv_data, "active_profile_id": existing_profile_id}
+
     log_message("Parsing cv...")
     result = agent.invoke(state)
     cv_data = result["structured_response"]
@@ -66,9 +70,6 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
     print(f"Name: {cv_data.full_name}")
     print(f"Key Skills: {cv_data.key_skills}\n")
     print(cv_data.summary, end="\n\n")
-    
+
     profile_id = save_candidate_profile(user_store, user_id, cv_data, config)
-    return {
-            "cv_data": cv_data, 
-            "active_profile_id": profile_id
-        }
+    return {"cv_data": cv_data, "active_profile_id": profile_id}

@@ -5,6 +5,7 @@ from src.utils.document_handler import ingest_input_folder, save_findings_to_doc
 
 # --- Tests for ingest_input_folder ---
 
+
 @patch("src.utils.document_handler.glob")
 @patch("src.utils.document_handler.MarkItDown")
 def test_ingest_input_folder_success(mock_mid_class, mock_glob):
@@ -21,6 +22,7 @@ def test_ingest_input_folder_success(mock_mid_class, mock_glob):
     assert "--- CONTENT FROM resume.pdf ---" in result
     mock_mid_instance.convert.assert_called_once_with("files/input/resume.pdf")
 
+
 @patch("src.utils.document_handler.glob")
 @patch("src.utils.document_handler.log_message")
 def test_ingest_input_folder_empty(mock_log, mock_glob):
@@ -28,7 +30,9 @@ def test_ingest_input_folder_empty(mock_log, mock_glob):
     result = ingest_input_folder("empty_path")
     assert result == ""
 
+
 # --- Tests for save_findings_to_docx ---
+
 
 def test_save_findings_to_docx_success():
     # Mocking the AgentState and internal data models
@@ -45,7 +49,7 @@ def test_save_findings_to_docx_success():
 
     mock_state = {
         "cv_data": MagicMock(full_name="John Doe"),
-        "writer_data": MagicMock(jobs=[mock_job])
+        "writer_data": MagicMock(jobs=[mock_job]),
     }
 
     # We patch pathlib.Path.mkdir to avoid creating actual folders
@@ -54,8 +58,9 @@ def test_save_findings_to_docx_success():
 
     # Assertions
     assert isinstance(result, BytesIO)
-    assert result.getvalue().startswith(b"PK") # Standard Word doc (ZIP) header
-    
+    assert result.getvalue().startswith(b"PK")  # Standard Word doc (ZIP) header
+
+
 def test_save_findings_to_docx_error_handling():
     # Passing bad state to trigger exception
     result = save_findings_to_docx({})

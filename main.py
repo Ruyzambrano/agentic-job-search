@@ -15,7 +15,7 @@ from src.state import AgentState
 
 
 async def run_job_matcher(raw_context, config: dict) -> AgentState:
-    basicConfig(level='INFO')
+    basicConfig(level="INFO")
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
             model=ENV.get("CV_PARSE_GEMINI_MODEL"),
@@ -27,7 +27,7 @@ async def run_job_matcher(raw_context, config: dict) -> AgentState:
     writer_agent = create_writer_agent(get_llm_model(ENV.get("WRITER_GEMINI_MODEL")))
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
-    
+
     content = f"Parse the provided raw cv text: {raw_context}"
     state = {"messages": [HumanMessage(content=content)]}
 
@@ -45,6 +45,12 @@ if __name__ == "__main__":
     load_dotenv()
     desired_job = input("What job role are you looking for?\n").strip()
     desired_location = input("Where are you looking today?\n").strip()
-    config = {"configurable": {"user_id": "Ruy001", "location": desired_location, "role": desired_job}}
+    config = {
+        "configurable": {
+            "user_id": "Ruy001",
+            "location": desired_location,
+            "role": desired_job,
+        }
+    }
     raw_context = ingest_input_folder("files/input")
     run_job_matcher(raw_context, config)

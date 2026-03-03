@@ -1,4 +1,5 @@
 """Tools to be used by the agents"""
+
 from os import environ as ENV
 from logging import info
 import asyncio
@@ -24,23 +25,27 @@ def extract_best_url(job_result: dict | None) -> str:
     return job_result.get("link") or "Not specified"
 
 
-async def scrape_for_jobs(client: httpx.Client,
-    role_keywords: str, location: str, distance: int = 40) -> list[RawJobMatch]:
+async def scrape_for_jobs(
+    client: httpx.Client, role_keywords: str, location: str, distance: int = 40
+) -> list[RawJobMatch]:
     """Uses the SerpAPI to get a list of jobs"""
-    print(f"Searching for {role_keywords} roles in {location} within {distance} miles/km")
+    print(
+        f"Searching for {role_keywords} roles in {location} within {distance} miles/km"
+    )
     params = {
-            "engine": "google_jobs",
-            "q": role_keywords,
-            "location": location,
-            "hl": "en",
-            "lrad": str(distance),
-            "gl": "uk",
-            "api_key": ENV.get("SERPAPI_KEY")
-        }
-    response = await client.get("https://serpapi.com/search?", params=params)
+        "engine": "google_jobs",
+        "q": role_keywords,
+        "location": location,
+        "hl": "en",
+        "lrad": str(distance),
+        "gl": "uk",
+        "api_key": ENV.get("SERPAPI_KEY"),
+    }
+    response = await client.get(
+        "https://serpapi.com/search?", params=params, timeout=30.0
+    )
     data = response.json()
     return data.get("jobs_results", [])
-
 
 
 def format_results(job: dict) -> list[RawJobMatch]:

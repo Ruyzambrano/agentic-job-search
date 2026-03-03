@@ -14,13 +14,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(model=model)
 
+
 def log_message(message: str):
     """Logs message to terminal or to streamlit depending on context"""
     logging.info(message)
     ctx = get_script_run_ctx(True)
     if ctx:
         try:
-            st.write(message) 
+            st.write(message)
         except Exception:
             pass
 
