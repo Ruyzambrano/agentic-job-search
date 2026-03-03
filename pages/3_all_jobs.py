@@ -12,7 +12,7 @@ if __name__ == "__main__":
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )
-    jobs = cached_jobs_all_user_profiles(store, st.user.sub, sort_by)
+    jobs = cached_jobs_all_user_profiles(store, st.user.sub)
 
     filtered_jobs = jobs_filter_sidebar(jobs)
     st.title("All Jobs Matched to You")

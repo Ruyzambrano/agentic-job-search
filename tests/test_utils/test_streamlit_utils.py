@@ -8,8 +8,6 @@ from src.utils.streamlit_utils import (
     display_profile,
 )
 
-# --- Tests for Logic Functions (No Mocks needed) ---
-
 
 def test_iso_formatter_valid_date():
     date_str = "2026-03-02T10:00:00"
@@ -28,7 +26,6 @@ def test_format_salary_range_missing_min():
     assert format_salary_as_range(None, 80000) == "£80,000"
 
 
-# --- Tests for UI Logic with Streamlit Mocks ---
 
 
 @patch("src.utils.streamlit_utils.st")
@@ -78,19 +75,11 @@ def test_search_for_new_jobs_calls_async(mock_st, mock_async_run, mock_matcher):
     mock_async_run.assert_called_once()
 
 
-# --- Testing Filter Logic ---
 
+def test_filter_jobs_by_keywords(mock_analysed_job_match_with_meta):
 
-def test_filter_jobs_by_keywords():
-    mock_job = MagicMock()
-    # Pydantic model_dump_json simulation
-    mock_job.model_dump_json.return_value = (
-        '{"title": "Data Engineer", "tech_stack": ["Python"]}'
-    )
+    jobs = [mock_analysed_job_match_with_meta]
 
-    jobs = [mock_job]
-
-    # Match found
     assert len(filter_jobs_by_keywords(jobs, ["Python"])) == 1
-    # No match found
+
     assert len(filter_jobs_by_keywords(jobs, ["Java"])) == 0

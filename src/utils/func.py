@@ -1,5 +1,7 @@
 import logging
 import json
+from os import environ as ENV
+from typing import Literal
 
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -8,11 +10,31 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
+class APIKeyError(Exception):
+    def __init__(self, *args):
+        super().__init__(*args)
 
-def get_llm_model(model: str) -> ChatGoogleGenerativeAI:
-    return ChatGoogleGenerativeAI(model=model)
+class ModelTypeError(Exception):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+class ProviderError(Exception):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+def get_embeddings():
+    return GoogleGenerativeAIEmbeddings(model=ENV.get("EMBEDDING_MODEL"))
+
+def get_llm_model(model_type: str) -> ChatGoogleGenerativeAI:
+    """Allows user to define different models for each step of the pipeline"""
+    provider = get_provider()
+    api_key = get_active_api_key()
+    ai_model = get_model(model_type, provider)
+    # TODO: Add options for OpenAI / Claude 
+    return ChatGoogleGenerativeAI(model=ai_model,
+                                  api_key=api_key)
 
 
 def log_message(message: str):
@@ -106,3 +128,60 @@ def pretty_print_jobs_with_rich(json_string):
         )
 
         console.print("\n")
+
+def get_active_api_key() -> str:
+    user_override = st.session_state.get("CUSTOM_API_KEY")
+    if user_override:
+        return user_override
+        
+    secret_key = st.secrets.get("GEMINI_API_KEY")
+    if secret_key:
+        return secret_key
+        
+    fallback_api_key = ENV.get("GEMINI_API_KEY")
+    if fallback_api_key:
+        return fallback_api_key
+    raise APIKeyError("No AI API key!")
+
+def get_model(model_type: str, provider: Literal["GEMINI", "OPEN_AI"]) -> str:
+    user_override = st.session_state.get(f"CUSTOM_{model_type}_MODEL")
+    if user_override:
+        return user_override
+    model_string = f"{model_type}_{provider}_MODEL".upper()
+    secret_key = st.secrets.get(model_string)
+    if secret_key:
+        return secret_key
+        
+    fallback_model = ENV.get(model_string)
+    if fallback_model:
+        return fallback_model
+    raise ModelTypeError("No model set")
+
+def get_provider() -> str:
+    user_override = st.session_state.get("PROVIDER")
+    if user_override:
+        return user_override
+    
+    provider = st.secrets.get("PROVIDER")
+    if provider:
+        return provider
+    
+    fallback_provider = ENV.get("PROVIDER")
+    if fallback_provider:
+        return fallback_provider
+    raise ProviderError("No provider set")
+
+
+def get_serpapi_key() -> str:
+    user_override = st.session_state.get("SERPAPI_KEY")
+    if user_override:
+        return user_override
+    
+    api_key = st.secrets.get("SERPAPI_KEY")
+    if api_key:
+        return api_key
+    
+    fallback_key = ENV.get("SERPAPI_KEY")
+    if fallback_key:
+        return fallback_key
+    raise APIKeyError("No serpAPI key!")

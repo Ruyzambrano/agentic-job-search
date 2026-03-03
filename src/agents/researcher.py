@@ -1,16 +1,11 @@
 """Researched for jobs using SerpAPI"""
-
-import json
-
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
-from langchain.agents.middleware import ToolCallLimitMiddleware
-from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
-from src.schema import ListRawJobMatch, RawJobMatch
-from src.utils.tools import batch_scrape_jobs
+from src.schema import SearchQueryPlan
+from src.utils.tools import batch_scrape_jobs, sanitize_query, filter_redundant_queries
 from src.utils.vector_handler import (
     get_user_analysis_store,
     get_global_jobs_store,
@@ -19,34 +14,26 @@ from src.utils.vector_handler import (
 )
 from src.utils.func import log_message
 
-
 def create_researcher_agent(research_llm):
-    """Creates a research agent that can read a cv and get relevant jobs"""
-    system_prompt = """You are a Recruitment Search Engine. 
+    system_prompt = """You are an Expert Search Strategist. 
 
-### YOUR DATA SOURCE
-You have been provided with a structured 'CandidateProfile'. Use the job_title OR key_skills fields to create high-intent searches where the candidate profile would be a top candidate.
+### YOUR GOAL
+Analyze the 'CandidateProfile' and generate a list of 8-10 high-intent search queries for the Google Jobs API (SerpApi).
 
-### YOUR MANDATE
-1.  **Search Immediately**: Your first response MUST be a call to 'batch_scrape_jobs'. 
-2.  **Use OR boolean searches**: When constructing the search parameters, use OR over AND
-3.  **No Internal Monologue**: Do not explain your reasoning. Just call the tool.
-4.  **Halt**: Once you have called the tool, stop and wait for the results.
-5.  **NO POSTCODES**: No postcodes should be used in your searches, only city names. If in doubt, use the closest large town or city for your search"""
+### SEARCH ARCHITECTURE RULES
+1. **Diversity**: Create a mix of queries. Some should be specific (Exact Job Title + City), others broader (Key Skills + Region).
+2. **Boolean Logic**: Use 'OR' to group similar titles, e.g., "('Data Engineer' OR 'Data Infrastructure') London".
+3. **No Postcodes**: Use city or town names only. 
+4. **Keyword Extraction**: Identify the 3 most unique technical skills in the profile and create at least two queries centered specifically on those skills.
+5. **Seniority Mapping**: If the profile indicates 5+ years of experience, include terms like 'Senior', 'Lead', or 'Principal' in 50% of the queries.
 
-    research_llm.rate_limiter = InMemoryRateLimiter(
-        requests_per_second=0.1, check_every_n_seconds=0.1
-    )
+### OUTPUT FORMAT
+You must return a 'SearchQueryPlan' object. Do not attempt to call any tools. Your job is finished once the queries are generated."""
+
     return create_agent(
         model=research_llm,
         system_prompt=system_prompt,
-        tools=[batch_scrape_jobs],
-        middleware=[
-            ToolCallLimitMiddleware(
-                tool_name="batch_scrape_jobs", thread_limit=1, run_limit=1
-            )
-        ],
-        response_format=ListRawJobMatch,
+        response_format=SearchQueryPlan,
     )
 
 
@@ -76,15 +63,17 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
 
     log_message(f"Researching for roles in {search_location}...")
     prompt_content = (
-        f"Find jobs in {search_location} for this profile: {profile.summary}. "
-        f"Target roles: {target_roles} {profile.job_titles}. Skills: {profile.key_skills}."
+        f"Create API query strings for a job search for this profile focusing on the target role {target_roles}: {profile.model_dump_json()}. "
     )
     new_message = [HumanMessage(content=prompt_content)]
     response = await agent.ainvoke(
         {**state, "messages": state["messages"] + new_message}
     )
 
-    all_jobs = response["structured_response"]
-
-    log_message(f"Research complete! Found a total of {len(all_jobs.jobs)} jobs")
-    return {"messages": new_message, "research_data": all_jobs}
+    all_queries = response["structured_response"]
+    clean_pool = list(set(sanitize_query(q) for q in all_queries.queries))
+    final_queries = filter_redundant_queries(clean_pool)
+    jobs = await batch_scrape_jobs(final_queries, search_location)
+    jobs = sync_with_global_library(global_store, jobs, 7)
+    log_message(f"Research complete! Found a total of {len(jobs)} jobs")
+    return {"messages": new_message, "research_data": jobs}

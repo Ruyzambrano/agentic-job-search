@@ -65,8 +65,8 @@ def test_save_candidate_profile(mock_embeddings, mock_chroma_store):
 
 @patch("src.utils.vector_handler.log_message")
 def test_sync_with_global_library_new_job(mock_log, mock_chroma_store):
-    # Setup: Mock store returning nothing (New Job)
     mock_chroma_store.get.return_value = {"ids": [], "metadatas": []}
+    mock_chroma_store.add_texts = MagicMock()
 
     job = RawJobMatch(
         title="New Job",
@@ -79,6 +79,5 @@ def test_sync_with_global_library_new_job(mock_log, mock_chroma_store):
 
     final_jobs = sync_with_global_library(mock_chroma_store, raw_results)
 
-    # Verify add_texts was called for the new job
     mock_chroma_store.add_texts.assert_called_once()
     assert final_jobs[0].title == "New Job"

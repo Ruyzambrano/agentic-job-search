@@ -1,14 +1,14 @@
 """Tools to be used by the agents"""
-
-from os import environ as ENV
 from logging import info
 import asyncio
-import httpx
 from typing import List
+import re
 
-from langchain_core.tools import tool
+import httpx
+from rapidfuzz import fuzz
 
 from src.schema import ListRawJobMatch, RawJobMatch
+from src.utils.func import get_serpapi_key
 
 
 def extract_best_url(job_result: dict | None) -> str:
@@ -39,7 +39,7 @@ async def scrape_for_jobs(
         "hl": "en",
         "lrad": str(distance),
         "gl": "uk",
-        "api_key": ENV.get("SERPAPI_KEY"),
+        "api_key": get_serpapi_key(),
     }
     response = await client.get(
         "https://serpapi.com/search?", params=params, timeout=30.0
@@ -73,7 +73,6 @@ def format_results(job: dict) -> list[RawJobMatch]:
     return "Not acceptable"
 
 
-@tool
 async def batch_scrape_jobs(
     queries: List[str], location: str, distance: int = 40
 ) -> ListRawJobMatch:
@@ -85,11 +84,44 @@ async def batch_scrape_jobs(
     async with httpx.AsyncClient() as client:
         tasks = [scrape_for_jobs(client, q, location, distance) for q in queries]
         results = await asyncio.gather(*tasks)
+
     for search_result in results:
         for job in search_result:
-            all_results.append(format_results(job))
+            parsed = format_results(job)
+            if parsed:
+                all_results.append(parsed)
 
     unique_map = {j.job_url: j for j in all_results if j.job_url}
     final_jobs = list(unique_map.values())
     print(f"BATCH SCRAPE COMPLETE: found {len(final_jobs)}")
     return ListRawJobMatch(jobs=final_jobs)
+
+def sanitize_query(q: str) -> str:
+    q = q.upper().strip()
+    q = re.sub(r'\s+', ' ', q)
+    
+    clean = q.replace('(', '').replace(')', '').replace("-", "")
+    terms = [t.strip() for t in clean.split(" OR ")]
+    
+    unique_terms = sorted(list(set(t for t in terms if t)))
+    
+    return " OR ".join(unique_terms)
+
+
+def filter_redundant_queries(queries, threshold=85):
+    """
+    filters queries that are similar to each other
+    """
+    unique_queries = []
+    for q in queries:
+        is_redundant = False
+        for u in unique_queries:
+            # token_sort_ratio ignores word order and duplicate words
+            score = fuzz.token_sort_ratio(q, u)
+            if score >= threshold:
+                is_redundant = True
+                break
+        
+        if not is_redundant:
+            unique_queries.append(q)
+    return unique_queries

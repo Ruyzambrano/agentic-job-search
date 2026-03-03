@@ -1,7 +1,7 @@
 import pytest
 import respx
 import httpx
-from src.utils.tools import extract_best_url, format_results, batch_scrape_jobs
+from src.utils.tools import extract_best_url, format_results, batch_scrape_jobs, sanitize_query, filter_redundant_queries
 from src.schema import RawJobMatch, ListRawJobMatch
 
 
@@ -45,7 +45,6 @@ def test_format_results_valid_job():
     assert result.salary_string == "100k"
 
 
-# --- Tests for batch_scrape_jobs (The Big One) ---
 @pytest.mark.asyncio
 @respx.mock
 async def test_batch_scrape_jobs_success():
@@ -59,8 +58,8 @@ async def test_batch_scrape_jobs_success():
     )
 
     # Change .invoke to .ainvoke
-    result = await batch_scrape_jobs.ainvoke(
-        {"queries": ["Python"], "location": "London", "distance": 40}
+    result = await batch_scrape_jobs(
+        ["Python"],  "London",  40
     )
 
     assert isinstance(result, ListRawJobMatch)
@@ -74,8 +73,62 @@ async def test_batch_scrape_jobs_empty_results():
         return_value=httpx.Response(200, json={"jobs_results": []})
     )
 
-    result = await batch_scrape_jobs.ainvoke(
-        {"queries": ["NicheRoleThatDoesntExist"], "location": "Mars"}
+    result = await batch_scrape_jobs(
+         ["NicheRoleThatDoesntExist"], "Mars"
     )
 
     assert len(result.jobs) == 0
+
+
+
+
+
+def test_sanitize_basic_cleanup():
+    assert sanitize_query("  data engineer  ") == "DATA ENGINEER"
+    assert sanitize_query("Data Engineer-") == "DATA ENGINEER"
+
+def test_sanitize_boolean_reordering():
+    q1 = sanitize_query("Python OR SQL")
+    q2 = sanitize_query("SQL OR Python")
+    assert q1 == q2
+    assert q1 == "PYTHON OR SQL"
+
+def test_sanitize_parentheses_removal():
+    q1 = sanitize_query("(SQL OR Python) OR Java")
+    q2 = sanitize_query("Java OR SQL OR Python")
+    assert q1 == q2
+    assert q1 == "JAVA OR PYTHON OR SQL"
+
+def test_sanitize_duplicate_terms_within_query():
+    assert sanitize_query("SQL OR SQL OR Python") == "PYTHON OR SQL"
+
+
+def test_filter_exact_duplicates():
+    queries = ["DATA ENGINEER", "DATA ENGINEER"]
+    assert len(filter_redundant_queries(queries)) == 1
+
+def test_filter_fuzzy_near_matches():
+    queries = ["Data Engineer London", "Data Engineering London"]
+    result = filter_redundant_queries(queries, threshold=85)
+    assert len(result) == 1
+    assert result[0] == "Data Engineer London"
+
+def test_filter_distinct_queries():
+    queries = ["Python Developer", "Accountant"]
+    assert len(filter_redundant_queries(queries)) == 2
+
+
+
+def test_full_optimization_pipeline():
+    raw_input = [
+        "(SQL OR Python) London",
+        "Python OR SQL London",        
+        "Python OR SQL  London ",      
+        "Data Scientist Manchester", 
+        "Data Science Manchester"    
+    ]
+    
+    clean_pool = list(set(sanitize_query(q) for q in raw_input))
+    final = filter_redundant_queries(clean_pool, threshold=85)
+    
+    assert len(final) == 2

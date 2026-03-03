@@ -67,7 +67,7 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
     if not profile_id or not user_id:
         raise ValueError("Missing profile_id or user_id. Cannot perform analysis.")
 
-    research_jobs = state.get("research_data").jobs
+    research_jobs = state.get("research_data")
 
     new_message_obj = None
 

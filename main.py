@@ -1,4 +1,3 @@
-from os import environ as ENV
 from logging import basicConfig
 import asyncio
 
@@ -15,16 +14,23 @@ from src.state import AgentState
 
 
 async def run_job_matcher(raw_context, config: dict) -> AgentState:
+    load_dotenv()
     basicConfig(level="INFO")
     cv_parser_agent = create_cv_parser_agent(
         get_llm_model(
-            model=ENV.get("CV_PARSE_GEMINI_MODEL"),
+            model_type="CV_PARSE"
         )
     )
     researcher_agent = create_researcher_agent(
-        get_llm_model(ENV.get("SEARCH_GEMINI_MODEL"))
+        get_llm_model(
+            model_type="SEARCH"
+        )
     )
-    writer_agent = create_writer_agent(get_llm_model(ENV.get("WRITER_GEMINI_MODEL")))
+    writer_agent = create_writer_agent(
+        get_llm_model(
+            model_type="WRITER"
+        )
+    )
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
 
@@ -42,7 +48,6 @@ async def run_job_matcher(raw_context, config: dict) -> AgentState:
 
 
 if __name__ == "__main__":
-    load_dotenv()
     desired_job = input("What job role are you looking for?\n").strip()
     desired_location = input("Where are you looking today?\n").strip()
     config = {

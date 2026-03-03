@@ -1,10 +1,8 @@
-from os import environ as ENV
 from datetime import datetime, timedelta
 from json import loads, dumps
 from typing import List
 
 from langchain_chroma import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.runnables import RunnableConfig
 
 from src.schema import (
@@ -13,11 +11,7 @@ from src.schema import (
     RawJobMatch,
     ListRawJobMatch,
 )
-from src.utils.func import log_message
-
-
-def get_embeddings():
-    return GoogleGenerativeAIEmbeddings(model=ENV.get("EMBEDDING_MODEL"))
+from src.utils.func import log_message, get_embeddings
 
 
 def get_global_jobs_store():
@@ -121,7 +115,7 @@ def sync_with_global_library(
 ) -> List[RawJobMatch]:
     final_jobs = []
     seen_identifiers = set()
-    log_message(f"Syncing {len(raw_results.jobs)} roles with Global Library")
+    log_message(f"Syncing roles with Global Library")
     for job in raw_results.jobs:
         unique_key = f"{job.job_url}_{job.title}"
         if unique_key in seen_identifiers:
@@ -235,7 +229,9 @@ def find_all_roles_for_user(jobs_store, user_id):
 
 def fetch_raw_job_data(global_store, job_url) -> RawJobMatch:
     result = global_store.get(ids=[job_url])
-    return RawJobMatch(**result.get("metadatas")[0])
+    if len(result.get("metadatas")) > 0:
+        return RawJobMatch(**result.get("metadatas")[0])
+    
 
 
 def delete_profile(store, profile_id):

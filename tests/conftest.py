@@ -1,6 +1,6 @@
 from os import environ as ENV, path
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from pytest import fixture
 from shutil import rmtree
 
@@ -10,13 +10,35 @@ from src.schema import (
     ListRawJobMatch,
     RawJobMatch,
     AnalysedJobMatchWithMeta,
+    SearchQueryPlan
 )
 
+@fixture
+def mock_streamlit(monkeypatch):
+    mock_session = {}
+    mock_secrets = {}
+    # We use monkeypatch to replace the real streamlit attributes
+    monkeypatch.setattr("streamlit.session_state", mock_session)
+    monkeypatch.setattr("streamlit.secrets", mock_secrets)
+    return mock_session, mock_secrets
+
+@fixture
+def mock_env(monkeypatch):
+    mock_env_dict = {}
+    # Replace your ENV object with this dict
+    monkeypatch.setattr("your_module.ENV", mock_env_dict)
+    return mock_env_dict
+
+@fixture
+def mock_search_query_plan():
+    return SearchQueryPlan(
+        queries=["Data Engineer", "Python Developer"],
+        reasoning="Because"
+    )
 
 @fixture
 def mock_chroma_store():
     store = MagicMock()
-    # Mock the .get method to return empty by default
     store.get.return_value = {"ids": [], "metadatas": []}
     return store
 
@@ -31,6 +53,11 @@ def test_db_env():
     if path.exists("./test_chroma_db"):
         rmtree("./test_chroma_db")
 
+@fixture
+def mock_env(monkeypatch):
+    mock_env_dict = {}
+    monkeypatch.setattr("src.utils.func.ENV", mock_env_dict)
+    return mock_env_dict
 
 @fixture
 def mock_config():

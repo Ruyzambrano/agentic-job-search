@@ -3,6 +3,7 @@ from os import remove
 import tempfile
 import asyncio
 import re
+from io import BytesIO
 
 from markitdown import MarkItDown
 import streamlit as st
@@ -150,24 +151,17 @@ def format_salary_as_range(salary_min: int, salary_max: int):
     return "Salary not specified"
 
 
-def process_new_cv(desired_role: str, desired_location: str):
-    analyse = st.button("Analyse CV and search for jobs", type="primary")
-
-    if analyse:
-        with st.status("Getting you jobs"):
-            config = {
-                "configurable": {
-                    "user_id": st.user.sub,
-                    "location": desired_location,
-                    "role": desired_role,
-                }
-            }
-            try:
-                return get_job_analysis(st.session_state["raw_cv_text"], config)
-
-            except Exception as e:
-                st.error(str(e))
-        st.success("Success!")
+def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
+    """Pure logic function: No buttons, just execution."""
+    config = {
+        "configurable": {
+            "user_id": st.user.sub if st.user else "local-user",
+            "location": desired_location,
+            "role": desired_role,
+        }
+    }
+    return get_job_analysis(raw_cv_text, config)
+        
 
 
 def search_for_new_jobs(active_profile_meta: dict, user_id):
@@ -473,11 +467,11 @@ def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by
 
 
 @st.dialog("Delete Profile")
-def delete_profile(store, profile_id):
+def delete_profile_dialogue(store, profile_id):
     if st.button("Are you sure you want to delete this profile?"):
         delete_profile(store, profile_id)
         st.write("Profile deleted")
-        return
+        st.rerun()
 
 
 def display_raw_job_matches(jobs: list[RawJobMatch], sort_by: str):
@@ -652,3 +646,23 @@ def sort_raw_job_matches_with_meta(
     reverse = target_attr == "posted_at"
     jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
     return jobs
+
+@st.dialog("New CV")
+def cv_handler():
+    new_cv = st.file_uploader("Upload a new CV (PDF, DOCX)", type=["pdf", "docx"])
+    
+    if new_cv:
+        with st.spinner("Extracting text..."):
+            text = get_cv_text(new_cv)
+            st.session_state.raw_cv_text = text
+            
+    if st.session_state.get("raw_cv_text"):
+        st.success("CV read successfully!")
+        role = st.text_input("Desired Role", value="Data Engineer")
+        loc = st.text_input("Desired Location", value="London")
+        
+        if st.button("Analyze & Find Jobs"):
+            st.session_state.start_processing = True
+            st.session_state.desired_role = role
+            st.session_state.desired_location = loc
+            st.rerun()

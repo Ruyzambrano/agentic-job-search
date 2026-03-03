@@ -3,7 +3,6 @@
 import streamlit as st
 
 from src.utils.streamlit_utils import login_screen
-from src.schema import AnalysedJobMatch
 
 if __name__ == "__main__":
     st.set_page_config(page_title="CV Job Searcher", layout="wide")
@@ -14,7 +13,6 @@ if __name__ == "__main__":
 
     pages = [
         st.Page(page="pages/1_home.py", title="Home", default=True),
-        st.Page(page="pages/2_cv_uploader.py", title="Upload a new CV"),
         st.Page(page="pages/3_all_jobs.py", title="Your Jobs"),
         st.Page(page="pages/4_job_view.py", title="Job Detail"),
         st.Page(page="pages/5_global_jobs.py", title="All Jobs"),

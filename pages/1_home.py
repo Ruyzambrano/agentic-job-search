@@ -1,7 +1,5 @@
 """See your profiles and Jobs"""
-
 import streamlit as st
-from json import loads
 
 from src.utils.streamlit_utils import (
     display_profile,
@@ -11,7 +9,9 @@ from src.utils.streamlit_utils import (
     get_cached_user_store,
     get_cached_jobs_for_profile,
     search_for_new_jobs,
-    delete_profile,
+    delete_profile_dialogue,
+    cv_handler,
+    process_new_cv
 )
 
 
@@ -21,6 +21,22 @@ def main_page():
 
     user_id = st.user.sub
 
+    if st.sidebar.button("Add New CV", width="stretch"):
+        cv_handler()
+
+    if st.session_state.get("start_processing"):
+        with st.status("Running Agent Pipeline...", expanded=True) as status:
+            st.write("Analyzing CV...")
+            analysis = process_new_cv(
+                st.session_state.raw_cv_text,
+                st.session_state.desired_role, 
+                st.session_state.desired_location
+            )
+            st.session_state["job_analysis"] = analysis
+            st.session_state.start_processing = False
+            status.update(label="Analysis Complete!", state="complete")
+            st.session_state.raw_cv_text = None
+        st.rerun()
     try:
         active_profile_meta = filter_for_profiles(user_vector_store, user_id)
 
@@ -46,6 +62,7 @@ def main_page():
             st.session_state["job_analysis"] = search_for_new_jobs(
                 active_profile_meta, user_id
             )
+            get_cached_jobs_for_profile.clear()
         sorting = st.empty()
 
         st.divider()
@@ -55,7 +72,7 @@ def main_page():
             use_container_width=True,
             type="primary",
         ):
-            delete_profile(user_vector_store, active_profile_meta.get("profile_id"))
+            delete_profile_dialogue(user_vector_store, active_profile_meta.get("profile_id"))
             get_cached_jobs_for_profile.clear()
 
     display_profile(profile=active_profile_meta)
