@@ -36,6 +36,12 @@ def mock_search_query_plan():
         reasoning="Because"
     )
 
+@pytest.fixture(autouse=True)
+def mock_streamlit_secrets(monkeypatch):
+    mock_secrets = {}
+    monkeypatch.setattr("streamlit.secrets", mock_secrets)
+    return mock_secrets
+
 @fixture
 def mock_chroma_store():
     store = MagicMock()
