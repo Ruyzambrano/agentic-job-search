@@ -22,3 +22,5 @@ streamlit-tags
 pytest-asyncio
 respx
 rapidfuzz
+streamlit-local-storage
+google-genai

@@ -1,5 +1,4 @@
 """Analyses the returned jobs based on the candidate profile"""
-
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -14,6 +13,7 @@ from src.schema import (
     AnalysedJobMatchListWithMeta,
     AnalysedJobMatchList,
     AnalysedJobMatchWithMeta,
+    PipelineSettings
 )
 from src.state import AgentState
 from src.utils.func import log_message
@@ -21,6 +21,14 @@ from src.utils.func import log_message
 
 def create_writer_agent(writer_llm):
     """Creates a writer agent"""
+    
+    
+    # risk_clause = (
+    #     "STRICTLY DETECT OVER-QUALIFICATION: If a candidate has 10 years of experience "
+    #     "and the job is 'Junior,' the score should be LOW due to 'Retention Risk'."
+    #     if settings.get("retention_risk") else 
+    #     "IGNORE seniority over-qualification; focus only on technical competency."
+    # )
     system_prompt = """You are a Critical Recruitment Auditor. Your task is to perform a high-fidelity "Gap Analysis" between a Candidate Profile and a list of job openings.
 
 ### YOUR MANDATE

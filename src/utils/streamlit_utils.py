@@ -3,14 +3,14 @@ from os import remove
 import tempfile
 import asyncio
 import re
-from io import BytesIO
 
 from markitdown import MarkItDown
 import streamlit as st
 from streamlit_tags import st_tags
+from streamlit_local_storage import LocalStorage
+from google import genai
 
-
-from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
+from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch, PipelineSettings, AgentWeights
 from main import run_job_matcher
 from src.utils.vector_handler import (
     find_all_candidate_profiles,
@@ -189,9 +189,7 @@ def generate_docx(state):
     return save_findings_to_docx(state)
 
 
-st.cache_data(show_spinner=False)
-
-
+@st.cache_data(show_spinner=False)
 def get_cv_text(uploaded_file):
     return upload_file(uploaded_file)
 
@@ -582,42 +580,342 @@ def extract_base_locations(location_str: str) -> list[str]:
 
     return sorted(list(set(clean_cities)))
 
+def get_weight_map():
+    return {
+        "Minimal": 25,
+        "Moderate": 50,
+        "High": 75,
+        "Critical": 100
+    }
 
 def render_settings_page():
     st.title("⚙️ Pipeline Settings")
+    st.markdown("Configure the behavior of the AI agents and data processing pipeline.")
 
-    tab1, tab2, tab3 = st.tabs(["Agent Logic", "Data Ingestion", "API & Integrations"])
+    
 
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🧠 Agent Logic", 
+        "📡 Scraping", 
+        "💾 Database", 
+        "🔑 Integrations"
+    ])
+    
     with tab1:
         st.subheader("Match Scoring Weights")
-        st.info("Adjust how the AI ranks candidates against job descriptions.")
+        st.caption("Influence how the Critical Recruitment Auditor ranks candidates.")
+        weight_map = get_weight_map()
+        reversed_weight_map = {v: k for k, v in weight_map.items()}
+        weights = st.session_state.pipeline_settings.weights
+        st.session_state.new_weights = AgentWeights(
+            tech_stack=weights.tech_stack,
+            experience=weights.experience,
+            location=weights.location,
+            seniority_weight=weights.seniority_weight,
+            retention_risk=weights.retention_risk
+        )
         col1, col2 = st.columns(2)
         with col1:
-            tech_weight = st.slider("Tech Stack Importance", 0, 100, 70)
-            exp_weight = st.slider("Experience Importance", 0, 100, 50)
+            tech_label = st.select_slider(
+                "Tech Stack Importance", 
+                options=["Minimal", "Moderate", "High", "Critical"],
+                value=reversed_weight_map.get(weights.tech_stack, "High")
+            )
+            st.session_state.new_weights.tech_stack = weight_map[tech_label]
+
+            exp_label = st.select_slider(
+                "Experience Importance", 
+                options=["Minimal", "Moderate", "High", "Critical"],
+                value=reversed_weight_map.get(weights.experience, "Moderate")
+            )
+            st.session_state.new_weights.experience = weight_map[exp_label]
+
         with col2:
-            loc_weight = st.slider("Location Importance", 0, 100, 30)
-            culture_weight = st.slider("Soft Skills Importance", 0, 100, 20)
+            seniority = st.select_slider(
+                "Seniority Alignment", 
+                options=["Minimal", "Moderate", "High", "Critical"],
+                value=reversed_weight_map.get(weights.seniority_weight, "High")
+            )
+            st.session_state.new_weights.seniority_weight = weight_map[seniority]
+            st.session_state.new_weights.retention_risk = st.toggle("Enable 'Retention Risk' (Penalty for over-qualification)", value=True)
+        
+        save_settings("weights")
 
     with tab2:
-        st.subheader("Scraper Configuration")
-        st.selectbox(
-            "Sync Frequency", ["Real-time", "Every 6 Hours", "Daily", "Weekly"]
-        )
-        st.toggle("Auto-archive expired listings", value=True)
-        if st.button("Force Global Re-index", type="primary"):
-            st.warning("This will re-run analysis on all raw jobs. Proceed?")
+        st.subheader("SerpAPI Configuration")
+        st.session_state.pipeline_settings.scraper_settings.distance_param = st.number_input("Search Distance (km/miles)", value=40, step=5)
+        st.session_state.pipeline_settings.scraper_settings.region = st.selectbox("Search Region", ["UK", "US"], index=0).lower()
+        st.session_state.pipeline_settings.scraper_settings.max_results = st.number_input("Max Results per Query", value=10, max_value=50)
 
     with tab3:
-        st.subheader("Secrets & Connections")
-        st.text_input("GEmini API Key", type="password")
-        st.text_input(
-            "Slack Webhook URL", placeholder="https://hooks.slack.com/services/..."
-        )
+        st.subheader("Vector Store Management")
+        st.warning("Pruning the database is permanent. Use with caution.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Global Raw Jobs", "1,240", delta="+12 today")
+            if st.button("Clean Expired Jobs", use_container_width=True):
+                st.toast("Checking for expired listings...")
+        
+        with col2:
+            st.metric("Active User Profiles", f"{len(st.session_state.get('profiles', []))}")
+            if st.button("Clear Cache", use_container_width=True):
+                st.cache_data.clear()
+                st.success("App cache cleared.")
 
-    if st.button("Save Configuration"):
-        st.success("Settings updated and applied to Agent Pipeline.")
+    with tab4:
+        render_api_settings()
 
+    st.markdown("---")
+
+def save_settings(button_key: str):
+    col_save, col_reset, _ = st.columns([1, 1, 2])
+    if st.session_state.get("updated_setting"):
+        st.toast("✅ Settings Updated")
+        st.session_state.updated_setting = False
+        
+    if st.session_state.get("reset_settings"):
+        st.toast("🔄 Settings Reset")
+        st.session_state.reset_settings = False 
+        
+    with col_save:
+        if st.button("Save Settings", type="primary", key=f"save_{button_key}", width="stretch"):
+            setattr(st.session_state.pipeline_settings, button_key, st.session_state.get(f"new_{button_key}"))
+            st.session_state.updated_setting = True
+            st.session_state.reset_settings = False
+            st.rerun()
+
+        with col_reset:
+            if st.button("Reset to Default", 
+                        width="stretch",
+                        key=f"reset_{button_key}"):
+                reset_setting_to_default_values(button_key)
+                st.session_state.reset_settings = True
+                st.session_state.updated_settings = False
+                st.rerun()
+
+
+def render_api_settings():
+    if st.session_state.get("changed_api_key"):
+        st.toast("Changed AI API Key")
+        st.session_state.changed_api_key = False
+    if st.session_state.get("changed_provider"):
+        st.toast("Changed AI Provider")
+        st.session_state.changed_provider = False
+    if st.session_state.get("changed_serpapi"):
+        st.toast("Changed SerpAPI API Key")
+        st.session_state.changed_serpapi = False
+    if st.session_state.get("mupdated_models"):
+        st.toast("Updated Model Configuration")
+        st.session_state.updated_models = False
+
+    storage = LocalStorage()
+
+    for k in ["gemini_api_key", "serpapi_key", "ai_provider", "openai_api_key", "gemini_reader", "gemini_writer", "gemini_researcher",  "openai_reader", "openai_writer", "openai_researcher",  "anthropic_reader", "anthropic_writer", "anthropic_researcher"]:
+        get_browser_key(k, storage)
+
+    st.subheader("Secrets & API Keys")
+    all_providers = ["Gemini", "OpenAI", "Anthropic"]    
+    current_provider = st.session_state.pipeline_settings.api_settings.ai_provider
+    idx = all_providers.index(current_provider) if current_provider in all_providers else 0
+    new_provider = st.selectbox("AI Provider", all_providers, index=idx)
+    
+    api = st.session_state.pipeline_settings.api_settings
+    
+    if new_provider == "Gemini":
+        new_api_key = st.text_input(
+            "Gemini API Key", 
+            type="password", 
+            value=api.gemini_api_key, 
+            help="Get your key from Google AI Studio"
+        ).strip()
+        key_name = "gemini_api_key"
+    
+    elif new_provider == "OpenAI":
+        new_api_key = st.text_input(
+            "OpenAI API Key", 
+            type="password", 
+            value=api.openai_api_key,
+            help="Get your key from OpenAI Dashboard"
+        ).strip()
+        key_name = "openai_api_key"
+    
+    elif new_provider == "Anthropic":
+        new_api_key = st.text_input(
+            "OpenAI API Key", 
+            type="password", 
+            value=api.anthropic_api_key,
+            help="Get your key from OpenAI Dashboard"
+        ).strip()
+        key_name = "anthropic_api_key"
+
+    new_serpapi_key = st.text_input(
+        "SerpAPI Key", 
+        type="password", 
+        value=api.serpapi_key,
+        help="Used for live job searching"
+    ).strip()
+
+    # TODO: Slack integrations
+    # st.text_input("Slack Webhook", placeholder="https://hooks.slack.com/services/...", help="Optional: Send job alerts to Slack.")
+
+    if st.button("Save Keys to Browser", key="set_keys"):
+        st.session_state.changed_api_key = set_new_key(key_name, new_api_key, storage)
+        st.session_state.changed_provider = set_new_key("ai_provider", new_provider, storage)
+        st.session_state.changed_serpapi = set_new_key("serpapi_key", new_serpapi_key, storage)
+        st.rerun()
+    
+    st.write(":red[To see a full list of models, enter your API Key below]")
+    if getattr(api, key_name):
+        st.divider()
+        st.subheader("Select Models")
+        model_map = set_models_for_pipeline(new_provider)
+        if st.button("Save Model Configuration"):
+            save_provider_config(new_provider, model_map, storage)
+            st.session_state.updated_models = True
+            st.rerun()
+
+
+def set_models_for_pipeline(new_provider: str) -> dict:
+    api_settings = st.session_state.pipeline_settings.api_settings
+    if new_provider == "Gemini" and getattr(api_settings, "gemini_api_key", None):
+        models = get_gemini_models_safe(api_settings.gemini_api_key)
+        return get_models_for_pipelines(models, new_provider.lower())
+    # TODO: Implement openai and anthropic
+    # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
+    #     st.header("TODO: Get models")
+
+def get_model_index(models_list: list[dict], current_model_id: str) -> int:
+    """Finds the integer index of the saved model ID in the current options list."""
+    ids = [m["id"] for m in models_list]
+    try:
+        return ids.index(current_model_id)
+    except (ValueError, AttributeError):
+        return 0
+    
+def get_models_for_pipelines(models: list[str], new_provider: str):
+    api = st.session_state.pipeline_settings.api_settings
+    current_reader = getattr(api, f"{new_provider}_reader")
+    current_writer = getattr(api, f"{new_provider}_writer")
+    current_researcher = getattr(api, f"{new_provider}_researcher")
+    if st.toggle("Use different models for the agents?", value=True):
+        reader, researcher, writer = st.columns(3)
+        with reader:
+            reader_model = st.selectbox("Select a Model", 
+                                  options=models, 
+                                  format_func=lambda x: x.get("label").title().replace("-", " "),
+                                  key=f"select_{new_provider}_reader", 
+                                  index=get_model_index(models, current_reader))
+        with researcher:
+            researcher_model = st.selectbox("Select a Model", 
+                                  options=models, 
+                                  format_func=lambda x: x.get("label").title().replace("-", " "),
+                                  key=f"select_{new_provider}_researcher",
+                                  index=get_model_index(models, current_researcher))
+        with writer:
+            writer_model = st.selectbox("Select a Model", 
+                                  options=models, 
+                                  format_func=lambda x: x.get("label").title().replace("-", " "),
+                                  key=f"select_{new_provider}_writer",
+                                  index=get_model_index(models, current_writer))
+    else:
+        reader_model = st.selectbox("Select a Model", 
+                                  options=models, 
+                                  format_func=lambda x: x.get("label").title().replace("-", " "),
+                                  key=f"select_{new_provider}_all_nodes",
+                                  index=get_model_index(models, current_reader))
+        researcher_model = reader_model
+        writet_model = researcher_model
+
+        return {
+            "reader": reader_model.get("id"),
+            "writer": writer_model.get("id"),
+            "researcher": researcher_model.get("id")
+        }       
+def get_model_options(models):
+    return st.selectbox("Select a CV Parser", options=models, format_func=lambda model: model.title().replace("-", " "), key=f"select_{key_string}")
+
+def validate_ai_api_key(api_key: str) -> bool:
+    ...
+
+
+def get_gemini_models_safe(api_key: str = None, free_tier: bool = False):
+    """
+    Returns a default list of models if no key is provided, 
+    otherwise fetches the live list from Google.
+    """
+    basic_models = ["gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash"]
+    default_models = [{"id": m, "label": f"m | 🧠 (Deep Reasoning) | ⚡ (Fast)"} for m in basic_models]
+    if not api_key or len(api_key) < 10 or free_tier: 
+        return sorted(default_models, key=lambda model: model.get("id"), reverse=True)
+    try:
+        client = genai.Client(api_key=api_key)
+        suitable_models = []
+        for m in client.models.list():
+            if "gemini" not in m.name.lower():
+                continue
+            if "generateContent" not in m.supported_actions:
+                continue
+            
+            model_id = m.name.split('/')[-1]
+            
+            if any(x in model_id for x in ["robotic", "experimental", "vision", "embedding", "aqa"]):
+                continue
+
+            label = model_id
+            if m.thinking:
+                label += " | 🧠 (Deep Reasoning)"
+            if "flash" in model_id:
+                label += " | ⚡ (Fast)"
+
+            suitable_models.append({"id": model_id, "label": label})
+
+        return sorted(suitable_models, key=lambda model: model.get("id"), reverse=True)
+
+    except Exception as e:
+        st.error(f"{e} Not a valid ID, falling back to base models")
+        return sorted(default_models, key=lambda model: model.get("id"), reverse=True)
+
+
+def get_browser_key(key_type: str, storage: LocalStorage):
+    """
+    Fetches a specific key from browser storage and 
+    hydrates the Pydantic session state object.
+    """
+    api_settings = st.session_state.pipeline_settings.api_settings    
+    stored_val = storage.getItem(key_type)
+    current_val = getattr(api_settings, key_type, None)
+    if stored_val and not current_val:
+        setattr(api_settings, key_type, stored_val)
+        return stored_val
+        
+    return current_val
+    
+def set_new_key(key_type: str, new_key: str, storage: LocalStorage):
+    """
+    Compares new key against the nested session state.
+    Updates both Browser and RAM state if changed.
+    """
+    api_settings = st.session_state.pipeline_settings.api_settings
+    current_val = getattr(api_settings, key_type, None)
+
+    if new_key and new_key != current_val:
+
+        storage.setItem(key_type, new_key, key=f"set_browser_{key_type}")      
+        setattr(api_settings, key_type, new_key) 
+        return True  
+    return False
+
+def save_provider_config(provider: str, model_map: dict, storage: LocalStorage):
+    """
+    model_map: {"reader": "gpt-4o", "writer": "gpt-4o-mini"}
+    """
+    prefix = provider.lower()
+    for agent_role, model_id in model_map.items():
+        storage_key = f"{prefix}_{agent_role}"
+        storage.setItem(storage_key, model_id, key=f"set_{storage_key}")
+        
+        setattr(st.session_state.pipeline_settings.api_settings, storage_key, model_id)
 
 def sort_analysed_job_matches_with_meta(
     jobs: list[AnalysedJobMatchWithMeta], sort_by
@@ -666,3 +964,19 @@ def cv_handler():
             st.session_state.desired_role = role
             st.session_state.desired_location = loc
             st.rerun()
+
+def initialise_pipeline_settings():
+    """Initializes default settings in session state if not already present."""
+    pipeline_settings = st.session_state.get("pipeline_settings")
+    if not pipeline_settings or not isinstance(pipeline_settings, PipelineSettings):
+        st.session_state.pipeline_settings = PipelineSettings()
+    
+
+def reset_setting_to_default_values(setting: str):
+    if setting == "weights":
+        st.session_state.pipeline_settings.weights = AgentWeights()
+        st.session_state.new_weights = AgentWeights()
+    
+def update_settings(button_key: str, setting_object: AgentWeights):
+    if button_key == "weights":
+        st.session_state.pipeline_settings.weights = setting_object

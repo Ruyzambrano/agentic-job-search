@@ -121,3 +121,40 @@ class CandidateProfile(BaseModel):
         description="Industries they have worked in (e.g., ['Fintech', 'Healthcare'])"
     )
     work_preference: str = Field(description="Remote, Hybrid, or On-site if specified")
+
+
+class AgentWeights(BaseModel):
+    tech_stack: int = Field(default=75)
+    experience: int = Field(default=50)
+    location: int = Field(default=25)
+    seniority_weight: int = Field(default=75)
+    retention_risk: bool = Field(default=True)
+
+class ScraperSettings(BaseModel):
+    distance_param: int = Field(default=40)
+    max_results: int = Field(default=10)
+    region: str = Field(default="uk")
+
+class ApiSettings(BaseModel):
+    ai_provider: str = ""
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    serpapi_key: str = ""
+    slack_webhook: str = ""
+    gemini_reader: str = "gemini-2.5-flash-lite"
+    gemini_writer: str = "gemini-3-flash-preview"
+    gemini_researcher: str = "gemini-2.5-flash"
+
+    openai_reader: str = "gpt-4o-mini"
+    openai_writer: str = "gpt-4o"
+    openai_researcher: str = "gpt-5"
+    
+    anthropic_api_key: str = ""
+    claude_reader: str = "claude-3-5-haiku"
+    claude_writer: str = "claude-3-5-sonnet"
+    claude_researcher: str = "claude-3-5-sonnet"
+class PipelineSettings(BaseModel):
+    weights: AgentWeights = Field(default_factory=AgentWeights)
+    scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)
+    api_settings: ApiSettings = Field(default_factory=ApiSettings)
