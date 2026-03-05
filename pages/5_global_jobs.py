@@ -1,11 +1,12 @@
 import streamlit as st
 
-from src.utils.streamlit_utils import jobs_filter_sidebar, display_raw_job_matches
+from src.utils.streamlit_utils import jobs_filter_sidebar, display_raw_job_matches, init_app
 from src.utils.vector_handler import get_global_jobs_store
 from src.schema import RawJobMatch
 
 
 def global_job_list():
+    init_app()
     global_store = get_global_jobs_store()
 
     sort_by = st.sidebar.selectbox(

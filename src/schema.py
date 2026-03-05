@@ -154,6 +154,7 @@ class ApiSettings(BaseModel):
     claude_reader: str = "claude-3-5-haiku"
     claude_writer: str = "claude-3-5-sonnet"
     claude_researcher: str = "claude-3-5-sonnet"
+    
 class PipelineSettings(BaseModel):
     weights: AgentWeights = Field(default_factory=AgentWeights)
     scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)

@@ -1,7 +1,6 @@
-import altair as alt
-import pandas as pd
 import streamlit as st
 
+from src.utils.streamlit_utils import init_app
 from src.utils.altair_handler import (
     MarketAnalytics,
     create_salary_chart,
@@ -14,6 +13,7 @@ from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_st
 
 
 def main_dashboard():
+    init_app()
     global_store = get_global_jobs_store()
     user_store = get_user_analysis_store()
 

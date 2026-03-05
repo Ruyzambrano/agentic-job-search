@@ -5,9 +5,11 @@ from src.utils.streamlit_utils import (
     get_cached_user_store,
     display_job_matches,
     jobs_filter_sidebar,
+    init_app
 )
 
-if __name__ == "__main__":
+def all_jobs_page():
+    init_app()
     store = get_cached_user_store()
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
@@ -17,3 +19,7 @@ if __name__ == "__main__":
     filtered_jobs = jobs_filter_sidebar(jobs)
     st.title("All Jobs Matched to You")
     display_job_matches(filtered_jobs, sort_by)
+
+
+if __name__ == "__main__":
+    all_jobs_page()

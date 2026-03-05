@@ -1,8 +1,9 @@
 from glob import glob
-from os import path
+from os import path, remove
 from datetime import datetime
 import pathlib
 from io import BytesIO
+import tempfile
 
 from markitdown import MarkItDown
 from docx import Document
@@ -10,6 +11,18 @@ from docx import Document
 from src.state import AgentState
 from src.utils.func import log_message
 
+
+def upload_file(file):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.name}") as tmp_file:
+        tmp_file.write(file.getvalue())
+        tmp_path = tmp_file.name
+    md = MarkItDown()
+    result = md.convert(tmp_path)
+    file_text = result.text_content
+
+    remove(tmp_path)
+
+    return file_text
 
 def ingest_input_folder(folder_path="files/input"):
     """Reads all supported files and returns a single concatenated string."""

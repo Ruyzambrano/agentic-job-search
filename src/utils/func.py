@@ -2,6 +2,8 @@ import logging
 import json
 from os import environ as ENV
 from typing import Literal
+from datetime import datetime
+import re
 
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -11,6 +13,8 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+
+from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
 
 class APIKeyError(Exception):
     def __init__(self, *args):
@@ -185,3 +189,142 @@ def get_serpapi_key() -> str:
     if fallback_key:
         return fallback_key
     raise APIKeyError("No serpAPI key!")
+
+def format_salary_as_range(salary_min: int, salary_max: int):
+    if salary_min and salary_max:
+        return f"£{salary_min:,} - £{salary_max:,}"
+    if salary_max:
+        return f"£{salary_max:,}"
+    if salary_min:
+        return f"{salary_min:,}"
+    return "Salary not specified"
+
+
+def iso_formatter(option: datetime):
+    """Makes an ISO string human readable"""
+    try:
+        dt = datetime.fromisoformat(option)
+        return dt.strftime("%d %b %H:%M")
+    except:
+        return option
+
+def normalize(text: str) -> str:
+    if not text:
+        return ""
+    return str(text).title().replace("-", " ").replace("–", " ").strip()
+
+
+def get_job_val(job, fields: list[str], default=None):
+    """Helper to try multiple field names on a Pydantic object."""
+    for field in fields:
+        val = getattr(job, field, None)
+        if val is not None:
+            return val
+    return default
+
+def get_colour_map(score: int) -> str:
+    """Not used anymore?"""
+    if score > 85:
+        return "green"
+    if score > 70:
+        return "orange"
+    return "red"
+
+def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
+    if not keywords:
+        return jobs
+
+    filtered = []
+    lower_keywords = [kw.lower().strip() for kw in keywords if kw.strip()]
+
+    for job in jobs:
+        searchable_text = " ".join(
+            [
+                str(getattr(job, "title", "")),
+                str(getattr(job, "company", "")),
+                str(getattr(job, "job_summary", "")),
+                str(getattr(job, "location", "")),
+                " ".join(getattr(job, "tech_stack", []) or []),
+                " ".join(getattr(job, "attributes", []) or []),
+            ]
+        ).lower()
+
+        if any(kw in searchable_text for kw in lower_keywords):
+            filtered.append(job)
+
+    return filtered
+
+def get_weight_map():
+    return {
+        "None": 0,
+        "Minimal": 25,
+        "Moderate": 50,
+        "High": 75,
+        "Critical": 100
+    }
+
+def sort_analysed_job_matches_with_meta(jobs: list[AnalysedJobMatchWithMeta], sort_by) -> list[AnalysedJobMatchWithMeta]:
+    sort_map = {
+        "Score": "top_applicant_score",
+        "Analysis Date": "analysed_at",
+        "Company": "company",
+        "Role": "title",
+    }
+
+    target_attr = sort_map.get(sort_by, sort_by)
+
+    reverse = target_attr in ["top_applicant_score", "analysed_at"]
+    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
+    return jobs
+
+def sort_raw_job_matches_with_meta(jobs: list[RawJobMatch], sort_by) -> list[AnalysedJobMatchWithMeta]:
+    sort_map = {"Posted Date": "posted_at", "Company": "company_name", "Role": "title"}
+
+    target_attr = sort_map.get(sort_by, sort_by)
+
+    reverse = target_attr == "posted_at"
+    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
+    return jobs
+
+def extract_base_locations(location_str: str) -> list[str]:
+    """
+    Splits 'London / Hybrid / Telford' into ['London', 'Telford']
+    and removes parentheticals like '(Remote)'.
+    """
+    if not location_str:
+        return []
+
+    normalized = location_str.replace("/", "|").replace(",", "|")
+
+    parts = [p.strip() for p in normalized.split("|")]
+
+    clean_cities = []
+    for p in parts:
+        p_clean = re.sub(r"[\(\[].*?[\)\]]", "", p)
+        p_clean = (
+            p_clean.replace("(", "").replace(")", "").strip()
+        ) 
+        if "remote" in p_clean.lower():
+            clean_cities.append("Remote")
+        elif "hybrid" in p_clean.lower():
+            clean_cities.append("Hybrid")
+        elif "flexible" in p_clean.lower():
+            clean_cities.append("Flexible")
+        elif len(p_clean) > 2:
+            clean_cities.append(p_clean.title())
+
+    return sorted(list(set(clean_cities)))
+
+
+def validate_ai_api_key(api_key: str) -> bool:
+    ...
+
+def get_provider_config() -> dict:
+    return {
+        "Gemini": {"key": "gemini_api_key", "url": "Google AI Studio"},
+        "OpenAI": {"key": "openai_api_key", "url": "OpenAI Dashboard"},
+        "Anthropic": {"key": "anthropic_api_key", "url": "Anthropic Console"}
+    }
+
+def get_model_roles() -> list[str]:
+    return ["reader", "writer", "researcher"]

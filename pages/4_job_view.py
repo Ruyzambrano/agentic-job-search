@@ -7,10 +7,12 @@ from src.utils.streamlit_utils import (
     get_cached_user_store,
     get_cached_global_store,
     render_sidebar_feed,
+    init_app
 )
 
 
 def show_specific_job():
+    init_app()
     store = get_cached_user_store()
     global_job_store = get_cached_global_store()
 

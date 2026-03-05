@@ -11,11 +11,13 @@ from src.utils.streamlit_utils import (
     search_for_new_jobs,
     delete_profile_dialogue,
     cv_handler,
-    process_new_cv
+    process_new_cv, 
+    init_app
 )
 
 
 def main_page():
+    init_app()
     user_vector_store = get_cached_user_store()
     global_jobs_store = get_cached_global_store()
 
