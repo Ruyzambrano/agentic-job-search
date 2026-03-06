@@ -3,7 +3,7 @@ from langchain_core.messages import BaseMessage
 from typing import TypedDict, Annotated, Sequence, Optional
 from operator import add
 
-from src.schema import CandidateProfile, ListRawJobMatch, AnalysedJobMatchListWithMeta
+from src.schema import CandidateProfile, ListRawJobMatch, AnalysedJobMatchListWithMeta, PipelineSettings
 
 
 class AgentState(TypedDict):
@@ -12,3 +12,4 @@ class AgentState(TypedDict):
     research_data: Optional[ListRawJobMatch]
     writer_data: Optional[AnalysedJobMatchListWithMeta]
     active_profile_id: str
+    pipeline_settings: PipelineSettings

@@ -11,23 +11,23 @@ from src.schema import (
     RawJobMatch,
     ListRawJobMatch,
 )
-from src.utils.func import log_message, get_embeddings
+from src.utils.func import log_message
 
 
-def get_global_jobs_store():
+def get_global_jobs_store(embedding_model):
     """Collection for raw, deduplicated jobs across all users."""
     return Chroma(
         collection_name="global_raw_jobs",
-        embedding_function=get_embeddings(),
+        embedding_function=embedding_model,
         persist_directory="./chroma_db",
     )
 
 
-def get_user_analysis_store():
+def get_user_analysis_store(embedding_model):
     """Collection for personalized user-specific match analysis."""
     return Chroma(
         collection_name="user_job_analyses",
-        embedding_function=get_embeddings(),
+        embedding_function=embedding_model,
         persist_directory="./chroma_db",
     )
 

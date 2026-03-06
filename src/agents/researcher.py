@@ -13,6 +13,7 @@ from src.utils.vector_handler import (
     sync_with_global_library,
 )
 from src.utils.func import log_message
+from src.utils.embeddings_handler import get_embeddings
 
 def create_researcher_agent(research_llm):
     system_prompt = """You are an Expert Search Strategist. 
@@ -39,8 +40,12 @@ You must return a 'SearchQueryPlan' object. Do not attempt to call any tools. Yo
 
 async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     """Creates the node of the agent for workflows"""
-    user_store = get_user_analysis_store()
-    global_store = get_global_jobs_store()
+    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
+
+    embeddings = get_embeddings(pipeline_settings.api_settings)
+    user_store = get_user_analysis_store(embeddings)
+    global_store = get_global_jobs_store(embeddings)
+
     profile_id = state.get("active_profile_id") or config.get("configurable", {}).get(
         "profile_id"
     )
@@ -60,11 +65,17 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     profile = fetch_candidate_profile(profile_id, user_store)
 
     search_location = target_location or profile.current_location or "Remote"
-
+    weights = pipeline_settings.weights
     log_message(f"Researching for roles in {search_location}...")
     prompt_content = (
-        f"Create API query strings for a job search for this profile focusing on the target role {target_roles}: {profile.model_dump_json()}. "
+        f"USER PRIORITIES:\n"
+        f"- Tech Importance: {weights.tech_stack}/100\n"
+        f"- Experience Importance: {weights.experience}/100\n"
+        f"- Seniority Importance: {weights.seniority_weight}/100\n\n"
+        f"TASK: Create API query strings for target role {target_roles} "
+        f"based on this profile: {profile.model_dump_json()}."
     )
+    
     new_message = [HumanMessage(content=prompt_content)]
     response = await agent.ainvoke(
         {**state, "messages": state["messages"] + new_message}

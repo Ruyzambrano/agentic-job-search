@@ -1,16 +1,17 @@
 import streamlit as st
 
 from src.utils.streamlit_utils import (
-    cached_jobs_all_user_profiles,
-    get_cached_user_store,
     display_job_matches,
     jobs_filter_sidebar,
     init_app
 )
+from src.utils.streamlit_cache import get_cached_user_store, cached_jobs_all_user_profiles
+from src.utils.embeddings_handler import get_embeddings
+
 
 def all_jobs_page():
     init_app()
-    store = get_cached_user_store()
+    store = get_cached_user_store(get_embeddings(st.session_state.pipeline_settings.api_settings))
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )

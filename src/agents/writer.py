@@ -17,6 +17,7 @@ from src.schema import (
 )
 from src.state import AgentState
 from src.utils.func import log_message
+from src.utils.embeddings_handler import get_embeddings
 
 
 def create_writer_agent(writer_llm):
@@ -64,8 +65,10 @@ For every job, provide:
 def writer_node(state: AgentState, agent, config: RunnableConfig):
     """Analyses jobs against profile with local caching logic."""
     log_message("Analysing jobs against your profile...")
+    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
 
-    user_store = get_user_analysis_store()
+    embeddings = get_embeddings(pipeline_settings.api_settings)
+    user_store = get_user_analysis_store(embeddings)
 
     user_id = config.get("configurable", {}).get("user_id")
     profile_id = state.get("active_profile_id") or config.get("configurable", {}).get(

@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+
 
 from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
 
@@ -28,17 +28,17 @@ class ProviderError(Exception):
     def __init__(self, *args):
         super().__init__(*args)
 
-def get_embeddings():
-    return GoogleGenerativeAIEmbeddings(model=ENV.get("EMBEDDING_MODEL"))
 
-def get_llm_model(model_type: str) -> ChatGoogleGenerativeAI:
-    """Allows user to define different models for each step of the pipeline"""
-    provider = get_provider()
-    api_key = get_active_api_key()
-    ai_model = get_model(model_type, provider)
-    # TODO: Add options for OpenAI / Claude 
-    return ChatGoogleGenerativeAI(model=ai_model,
-                                  api_key=api_key)
+
+def validate_configuration(setting, error_message):
+    if not setting:
+        st.error(f"🚨 {error_message}")
+        if st.button("Go to Settings"):
+            st.switch_page("pages/settings.py")
+        st.stop()
+
+
+
 
 
 def log_message(message: str):
@@ -162,6 +162,7 @@ def get_model(model_type: str, provider: Literal["GEMINI", "OPEN_AI"]) -> str:
     raise ModelTypeError("No model set")
 
 def get_provider() -> str:
+    api_settings = st.session_state.pipeline_settings.api_settings
     user_override = st.session_state.get("PROVIDER")
     if user_override:
         return user_override
@@ -177,7 +178,7 @@ def get_provider() -> str:
 
 
 def get_serpapi_key() -> str:
-    user_override = st.session_state.get("SERPAPI_KEY")
+    user_override = st.session_state.pipeline_settings.api_settings.serpapi_key
     if user_override:
         return user_override
     

@@ -14,11 +14,10 @@ def get_browser_key(key_type: str, storage: LocalStorage, setting_type: str):
     settings = getattr(st.session_state.pipeline_settings, setting_type)
     browser_key = f"{setting_type}_{key_type}"
     stored_val = storage.getItem(browser_key)
-    current_val = getattr(settings, key_type, None)
-    if stored_val and not current_val:
+    if stored_val != None:
         setattr(settings, key_type, stored_val)
         return stored_val
-    return current_val
+    return getattr(settings, key_type, None)
 
 def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type: str):
     """
@@ -27,10 +26,12 @@ def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type
     """
     settings = getattr(st.session_state.pipeline_settings, setting_type, {})
     current_val = getattr(settings, key_name, None)
+
     if new_key != current_val and new_key != None:
         browser_key = f"{setting_type}_{key_name}"
-        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")      
         setattr(settings, key_name, new_key) 
+        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")      
+        
         return True  
     return False
 
@@ -42,5 +43,4 @@ def save_provider_config(provider: str, model_map: dict, storage: LocalStorage):
     for agent_role, model_id in model_map.items():
         storage_key = f"{prefix}_{agent_role}"
         storage.setItem(storage_key, model_id, key=f"set_{storage_key}")
-        
         setattr(st.session_state.pipeline_settings.api_settings, storage_key, model_id)

@@ -145,6 +145,7 @@ class ApiSettings(BaseModel):
     gemini_reader: str = "gemini-2.5-flash-lite"
     gemini_writer: str = "gemini-3-flash-preview"
     gemini_researcher: str = "gemini-2.5-flash"
+    gemini_embedding: str = "gemini-embedding-001"
 
     openai_reader: str = "gpt-4o-mini"
     openai_writer: str = "gpt-4o"

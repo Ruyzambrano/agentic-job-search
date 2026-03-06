@@ -11,6 +11,7 @@ from src.utils.vector_handler import (
     fetch_candidate_profile,
 )
 from src.utils.func import log_message
+from src.utils.embeddings_handler import get_embeddings
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -51,8 +52,10 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
         raise ValueError(
             "user_id is missing from the configuration. Cannot save profile."
         )
+    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
 
-    user_store = get_user_analysis_store()
+    embeddings = get_embeddings(pipeline_settings.api_settings)
+    user_store = get_user_analysis_store(embeddings)
 
     existing_profile_id = config.get("configurable", {}).get("active_profile_id")
 

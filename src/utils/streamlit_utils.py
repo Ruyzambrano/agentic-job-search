@@ -1,26 +1,20 @@
-import asyncio
-import re
-
 import streamlit as st
 from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
 
 
 from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch, PipelineSettings, AgentWeights
-from main import run_job_matcher
 from src.utils.vector_handler import (
     find_all_candidate_profiles,
-    get_global_jobs_store,
-    get_user_analysis_store,
-    find_all_roles_for_profile,
-    find_all_roles_for_user,
     fetch_raw_job_data,
     delete_profile,
 )
 from src.utils.local_storage import get_browser_key, set_new_key, save_provider_config, get_local_storage
-from src.utils.document_handler import save_findings_to_docx, upload_file
-from src.utils.func import format_salary_as_range, iso_formatter, normalize, get_job_val, filter_jobs_by_keywords, get_weight_map, sort_analysed_job_matches_with_meta, sort_raw_job_matches_with_meta, extract_base_locations, get_provider_config, get_model_roles
-from src.utils.model_functions import get_gemini_models_safe, get_model_index
+from src.utils.func import format_salary_as_range, iso_formatter, normalize, get_job_val, filter_jobs_by_keywords, get_weight_map, sort_analysed_job_matches_with_meta, sort_raw_job_matches_with_meta, extract_base_locations, get_provider_config, get_model_roles, validate_configuration
+from src.utils.model_functions import get_gemini_text_models, get_model_index, get_all_gemini_models, get_gemini_embedding_model_options, get_gemini_embedding_model, get_llm_model
+from src.utils.embeddings_handler import validate_and_get_models
+from src.utils.streamlit_cache import get_job_analysis, get_cv_text
+
 
 def login_screen():
     st.button("Log in with Google", on_click=st.login)
@@ -124,9 +118,11 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
             "user_id": st.user.sub if st.user else "local-user",
             "location": desired_location,
             "role": desired_role,
+            "pipeline_settings": st.session_state.pipeline_settings
         }
     }
-    return get_job_analysis(raw_cv_text, config)
+    models = validate_and_get_models()
+    return get_job_analysis(raw_cv_text, config, models)
         
 
 def search_for_new_jobs(active_profile_meta: dict, user_id):
@@ -138,45 +134,13 @@ def search_for_new_jobs(active_profile_meta: dict, user_id):
             "active_profile_id": selected_profile_id,
             "location": st.session_state.get("desired_location", ""),
             "role": st.session_state.get("desired_role", ""),
+            "pipeline_settings": st.session_state.pipeline_settings
         }
     }
+    models = validate_and_get_models()
     with st.status("Searching for jobs using existing profile..."):
-        return asyncio.run(run_job_matcher("", config))
+        return get_job_analysis("", config, models)
 
-
-@st.cache_data(show_spinner=False)
-def get_job_analysis(cv_text, config):
-    return asyncio.run(run_job_matcher(cv_text, config))
-
-
-@st.cache_data(show_spinner=False)
-def generate_docx(state):
-    return save_findings_to_docx(state)
-
-
-@st.cache_data(show_spinner=False)
-def get_cv_text(uploaded_file):
-    return upload_file(uploaded_file)
-
-
-@st.cache_resource
-def get_cached_user_store():
-    return get_user_analysis_store()
-
-
-@st.cache_resource
-def get_cached_global_store():
-    return get_global_jobs_store()
-
-
-@st.cache_data(show_spinner="Fetching matched jobs...")
-def get_cached_jobs_for_profile(_store, profile_id):
-    return find_all_roles_for_profile(_store, profile_id)
-
-
-@st.cache_data()
-def cached_jobs_all_user_profiles(_store, user_id):
-    return find_all_roles_for_user(_store, user_id)
 
 
 def jobs_filter_sidebar(jobs: list):
@@ -330,7 +294,6 @@ def display_full_job(
         st.write(current_job.top_applicant_reasoning)
 
         st.markdown("### 🛠 Tech Stack")
-        # Visualizing tech stack as badges
         badge_html = "".join(
             [
                 f'<span style="background-color:#e1e4e8; color:#0366d6; padding:4px 12px; margin:4px; border-radius:12px; font-weight:bold; display:inline-block;">{tech}</span>'
@@ -577,7 +540,7 @@ def show_success_toast():
         st.session_state.changed_serpapi = False
     if st.session_state.get("updated_models"):
         st.toast("Updated Model Configuration",
-                 icon=":material/model_training")
+                 icon=":material/model_training:")
         st.session_state.updated_models = False
     if st.session_state.get("updated_setting"):
         st.toast("Settings Updated",
@@ -616,7 +579,7 @@ def hydrate_settings(setting_type: str, keys: list[str], storage: LocalStorage):
         get_browser_key(key, storage, setting_type)   
 
 
-
+@st.fragment
 def render_api_settings(storage: LocalStorage):
     st.subheader("Secrets & API Keys")
     api = st.session_state.pipeline_settings.api_settings
@@ -646,8 +609,6 @@ def render_api_settings(storage: LocalStorage):
         st.session_state.changed_api_key = set_new_key(config["key"], new_api_key, storage, "api_settings")
         st.session_state.changed_provider = set_new_key("ai_provider", new_provider, storage, "api_settings")
         st.session_state.changed_serpapi = set_new_key("serpapi_key", new_serpapi_key, storage, "api_settings")
-        if any([st.session_state.changed_api_key, st.session_state.changed_provider, st.session_state.changed_serpapi]):
-            st.rerun()
     
     st.write(":red[To see a full list of models, enter your API Key below]")
     active_key = getattr(api, config["key"])
@@ -658,58 +619,70 @@ def render_api_settings(storage: LocalStorage):
         if st.button("Save Model Configuration"):
             save_provider_config(new_provider, model_map, storage)
             st.session_state.updated_models = True
-            st.rerun()
 
 
 def set_models_for_pipeline(new_provider: str) -> dict:
     api_settings = st.session_state.pipeline_settings.api_settings
     if new_provider == "Gemini" and getattr(api_settings, "gemini_api_key", None):
-        models = get_gemini_models_safe(api_settings.gemini_api_key)
-        return get_models_for_pipelines(models, new_provider.lower())
+        free_tier = st.toggle("Show only free tier models", value=False)
+        all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
+        text_models = get_gemini_text_models(all_models, free_tier)
+        embedding_models = get_gemini_embedding_model_options(all_models)
+        return get_models_for_pipelines(text_models, embedding_models, new_provider.lower())
     # TODO: Implement openai and anthropic
     # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
     #     st.header("TODO: Get models")
 
+@st.cache_data
+def get_model_cache(api_key: str, free_tier: bool = False):
+    return get_all_gemini_models(api_key, free_tier)
 
     
-def get_models_for_pipelines(models: list[str], new_provider: str):
+def get_models_for_pipelines(text_models: list[dict], embedding_models: list[dict], new_provider: str):
     api = st.session_state.pipeline_settings.api_settings
     current_reader = getattr(api, f"{new_provider}_reader")
     current_writer = getattr(api, f"{new_provider}_writer")
     current_researcher = getattr(api, f"{new_provider}_researcher")
+    current_embedding = getattr(api, f"{new_provider}_embedding")
     if st.toggle("Use different models for the agents?", value=True):
         reader, researcher, writer = st.columns(3)
         with reader:
-            reader_model = st.selectbox("Select a Model", 
-                                  options=models, 
+            reader_model = st.selectbox("Select a CV Parser", 
+                                  options=text_models, 
                                   format_func=lambda x: x.get("label").title().replace("-", " "),
                                   key=f"select_{new_provider}_reader", 
-                                  index=get_model_index(models, current_reader))
+                                  index=get_model_index(text_models, current_reader))
         with researcher:
-            researcher_model = st.selectbox("Select a Model", 
-                                  options=models, 
+            researcher_model = st.selectbox("Select a Researcher", 
+                                  options=text_models, 
                                   format_func=lambda x: x.get("label").title().replace("-", " "),
                                   key=f"select_{new_provider}_researcher",
-                                  index=get_model_index(models, current_researcher))
+                                  index=get_model_index(text_models, current_researcher))
         with writer:
-            writer_model = st.selectbox("Select a Model", 
-                                  options=models, 
+            writer_model = st.selectbox("Select an Analyser", 
+                                  options=text_models, 
                                   format_func=lambda x: x.get("label").title().replace("-", " "),
                                   key=f"select_{new_provider}_writer",
-                                  index=get_model_index(models, current_writer))
+                                  index=get_model_index(text_models, current_writer))
     else:
-        reader_model = st.selectbox("Select a Model", 
-                                  options=models, 
+        reader_model = st.selectbox("Select an Embedder", 
+                                  options=text_models, 
                                   format_func=lambda x: x.get("label").title().replace("-", " "),
                                   key=f"select_{new_provider}_all_nodes",
-                                  index=get_model_index(models, current_reader))
+                                  index=get_model_index(text_models, current_reader))
         researcher_model = reader_model
         writer_model = researcher_model
-
-        return {
+    with reader:
+        embedding_model = st.selectbox("Select a Model", 
+                                  options=embedding_models, 
+                                  format_func=lambda x: x.get("label").title().replace("-", " "),
+                                  key=f"select_{new_provider}_embedding",
+                                  index=get_model_index(embedding_models, current_embedding))
+    return {
             "reader": reader_model.get("id"),
             "writer": writer_model.get("id"),
-            "researcher": researcher_model.get("id")
+            "researcher": researcher_model.get("id"),
+            "embedding": embedding_model.get("id")
         }  
      
 def get_model_options(models):
@@ -756,4 +729,5 @@ def init_app():
     hydrate_keys(storage)
     hydrate_settings("weights", ["tech_stack", "seniority_weight", "experience", "retention_risk"], storage)
     hydrate_settings("scraper_settings", ["region", "max_results", "distance_param"] , storage)
+
 

@@ -1,6 +1,7 @@
 import streamlit as st
 
 from src.utils.streamlit_utils import init_app
+from src.utils.streamlit_cache import get_cached_user_store, get_cached_global_store
 from src.utils.altair_handler import (
     MarketAnalytics,
     create_salary_chart,
@@ -9,13 +10,14 @@ from src.utils.altair_handler import (
     create_market_heatmap,
     create_market_tightness_chart,
 )
-from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_store
+from src.utils.embeddings_handler import get_embeddings
 
 
 def main_dashboard():
     init_app()
-    global_store = get_global_jobs_store()
-    user_store = get_user_analysis_store()
+    embeddings = get_embeddings(st.session_state.pipeline_settings.api_settings)
+    global_store = get_cached_global_store(embeddings)
+    user_store = get_cached_user_store(embeddings)
 
     profiles = user_store.get().get("metadatas", {})
     jobs = global_store.get().get("metadatas", {})

@@ -1,13 +1,15 @@
 import streamlit as st
 
 from src.utils.streamlit_utils import jobs_filter_sidebar, display_raw_job_matches, init_app
-from src.utils.vector_handler import get_global_jobs_store
+from src.utils.streamlit_cache import get_cached_global_store
+from src.utils.embeddings_handler import get_embeddings
 from src.schema import RawJobMatch
 
 
 def global_job_list():
     init_app()
-    global_store = get_global_jobs_store()
+    embeddings = get_embeddings(st.session_state.pipeline_settings.api_settings)
+    global_store = get_cached_global_store(embeddings)
 
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Posted Date", "Company", "Role"]

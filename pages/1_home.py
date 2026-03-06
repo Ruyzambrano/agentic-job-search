@@ -5,21 +5,25 @@ from src.utils.streamlit_utils import (
     display_profile,
     filter_for_profiles,
     display_job_matches,
-    get_cached_global_store,
-    get_cached_user_store,
-    get_cached_jobs_for_profile,
     search_for_new_jobs,
     delete_profile_dialogue,
     cv_handler,
     process_new_cv, 
-    init_app
+    init_app,
+    )
+from src.utils.embeddings_handler import get_embeddings
+from src.utils.streamlit_cache import (
+    get_cached_global_store,
+    get_cached_jobs_for_profile,
+    get_cached_user_store
 )
 
 
 def main_page():
     init_app()
-    user_vector_store = get_cached_user_store()
-    global_jobs_store = get_cached_global_store()
+    embedding = get_embeddings(st.session_state.pipeline_settings.api_settings)
+    user_vector_store = get_cached_user_store(embedding)
+    global_jobs_store = get_cached_global_store(embedding)
 
     user_id = st.user.sub
 
