@@ -26,8 +26,6 @@ def test_format_salary_range_missing_min():
     assert format_salary_as_range(None, 80000) == "£80,000"
 
 
-
-
 @patch("src.utils.streamlit_utils.st")
 def test_login_screen_triggers_login(mock_st):
     from src.utils.streamlit_utils import login_screen
@@ -73,7 +71,6 @@ def test_search_for_new_jobs_calls_async(mock_st, mock_async_run, mock_matcher):
     mock_st.status.assert_called_once()
     # Verify we used asyncio.run to bridge the sync/async gap
     mock_async_run.assert_called_once()
-
 
 
 def test_filter_jobs_by_keywords(mock_analysed_job_match_with_meta):

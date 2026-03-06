@@ -1,6 +1,10 @@
 import streamlit as st
 
-from src.utils.streamlit_utils import jobs_filter_sidebar, display_raw_job_matches, init_app
+from src.utils.streamlit_utils import (
+    jobs_filter_sidebar,
+    display_raw_job_matches,
+    init_app,
+)
 from src.utils.streamlit_cache import get_cached_global_store
 from src.utils.embeddings_handler import get_embeddings
 from src.schema import RawJobMatch

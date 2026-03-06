@@ -24,6 +24,7 @@ def upload_file(file):
 
     return file_text
 
+
 def ingest_input_folder(folder_path="files/input"):
     """Reads all supported files and returns a single concatenated string."""
     md = MarkItDown()

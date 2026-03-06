@@ -1,15 +1,21 @@
-
 import asyncio
 
 import streamlit as st
 
 from main import run_job_matcher
 from src.utils.document_handler import save_findings_to_docx, upload_file
-from src.utils.vector_handler import get_user_analysis_store, get_global_jobs_store, find_all_roles_for_profile, find_all_roles_for_user
+from src.utils.vector_handler import (
+    get_user_analysis_store,
+    get_global_jobs_store,
+    find_all_roles_for_profile,
+    find_all_roles_for_user,
+)
+
 
 @st.cache_data(show_spinner=False)
 def get_job_analysis(cv_text, config, _models):
     return asyncio.run(run_job_matcher(cv_text, config, _models))
+
 
 @st.cache_data(show_spinner=False)
 def generate_docx(state):

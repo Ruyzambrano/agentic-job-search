@@ -16,18 +16,20 @@ from rich import box
 
 from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
 
+
 class APIKeyError(Exception):
     def __init__(self, *args):
         super().__init__(*args)
+
 
 class ModelTypeError(Exception):
     def __init__(self, *args):
         super().__init__(*args)
 
+
 class ProviderError(Exception):
     def __init__(self, *args):
         super().__init__(*args)
-
 
 
 def validate_configuration(setting, error_message):
@@ -36,9 +38,6 @@ def validate_configuration(setting, error_message):
         if st.button("Go to Settings"):
             st.switch_page("pages/settings.py")
         st.stop()
-
-
-
 
 
 def log_message(message: str):
@@ -133,19 +132,21 @@ def pretty_print_jobs_with_rich(json_string):
 
         console.print("\n")
 
+
 def get_active_api_key() -> str:
     user_override = st.session_state.get("CUSTOM_API_KEY")
     if user_override:
         return user_override
-        
+
     secret_key = st.secrets.get("GEMINI_API_KEY")
     if secret_key:
         return secret_key
-        
+
     fallback_api_key = ENV.get("GEMINI_API_KEY")
     if fallback_api_key:
         return fallback_api_key
     raise APIKeyError("No AI API key!")
+
 
 def get_model(model_type: str, provider: Literal["GEMINI", "OPEN_AI"]) -> str:
     user_override = st.session_state.get(f"CUSTOM_{model_type}_MODEL")
@@ -155,41 +156,12 @@ def get_model(model_type: str, provider: Literal["GEMINI", "OPEN_AI"]) -> str:
     secret_key = st.secrets.get(model_string)
     if secret_key:
         return secret_key
-        
+
     fallback_model = ENV.get(model_string)
     if fallback_model:
         return fallback_model
     raise ModelTypeError("No model set")
 
-def get_provider() -> str:
-    api_settings = st.session_state.pipeline_settings.api_settings
-    user_override = st.session_state.get("PROVIDER")
-    if user_override:
-        return user_override
-    
-    provider = st.secrets.get("PROVIDER")
-    if provider:
-        return provider
-    
-    fallback_provider = ENV.get("PROVIDER")
-    if fallback_provider:
-        return fallback_provider
-    raise ProviderError("No provider set")
-
-
-def get_serpapi_key() -> str:
-    user_override = st.session_state.pipeline_settings.api_settings.serpapi_key
-    if user_override:
-        return user_override
-    
-    api_key = st.secrets.get("SERPAPI_KEY")
-    if api_key:
-        return api_key
-    
-    fallback_key = ENV.get("SERPAPI_KEY")
-    if fallback_key:
-        return fallback_key
-    raise APIKeyError("No serpAPI key!")
 
 def format_salary_as_range(salary_min: int, salary_max: int):
     if salary_min and salary_max:
@@ -209,6 +181,7 @@ def iso_formatter(option: datetime):
     except:
         return option
 
+
 def normalize(text: str) -> str:
     if not text:
         return ""
@@ -223,6 +196,7 @@ def get_job_val(job, fields: list[str], default=None):
             return val
     return default
 
+
 def get_colour_map(score: int) -> str:
     """Not used anymore?"""
     if score > 85:
@@ -230,6 +204,7 @@ def get_colour_map(score: int) -> str:
     if score > 70:
         return "orange"
     return "red"
+
 
 def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
     if not keywords:
@@ -255,16 +230,14 @@ def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
 
     return filtered
 
-def get_weight_map():
-    return {
-        "None": 0,
-        "Minimal": 25,
-        "Moderate": 50,
-        "High": 75,
-        "Critical": 100
-    }
 
-def sort_analysed_job_matches_with_meta(jobs: list[AnalysedJobMatchWithMeta], sort_by) -> list[AnalysedJobMatchWithMeta]:
+def get_weight_map():
+    return {"None": 0, "Minimal": 25, "Moderate": 50, "High": 75, "Critical": 100}
+
+
+def sort_analysed_job_matches_with_meta(
+    jobs: list[AnalysedJobMatchWithMeta], sort_by
+) -> list[AnalysedJobMatchWithMeta]:
     sort_map = {
         "Score": "top_applicant_score",
         "Analysis Date": "analysed_at",
@@ -278,7 +251,10 @@ def sort_analysed_job_matches_with_meta(jobs: list[AnalysedJobMatchWithMeta], so
     jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
     return jobs
 
-def sort_raw_job_matches_with_meta(jobs: list[RawJobMatch], sort_by) -> list[AnalysedJobMatchWithMeta]:
+
+def sort_raw_job_matches_with_meta(
+    jobs: list[RawJobMatch], sort_by
+) -> list[AnalysedJobMatchWithMeta]:
     sort_map = {"Posted Date": "posted_at", "Company": "company_name", "Role": "title"}
 
     target_attr = sort_map.get(sort_by, sort_by)
@@ -286,6 +262,7 @@ def sort_raw_job_matches_with_meta(jobs: list[RawJobMatch], sort_by) -> list[Ana
     reverse = target_attr == "posted_at"
     jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
     return jobs
+
 
 def extract_base_locations(location_str: str) -> list[str]:
     """
@@ -302,9 +279,7 @@ def extract_base_locations(location_str: str) -> list[str]:
     clean_cities = []
     for p in parts:
         p_clean = re.sub(r"[\(\[].*?[\)\]]", "", p)
-        p_clean = (
-            p_clean.replace("(", "").replace(")", "").strip()
-        ) 
+        p_clean = p_clean.replace("(", "").replace(")", "").strip()
         if "remote" in p_clean.lower():
             clean_cities.append("Remote")
         elif "hybrid" in p_clean.lower():
@@ -317,15 +292,16 @@ def extract_base_locations(location_str: str) -> list[str]:
     return sorted(list(set(clean_cities)))
 
 
-def validate_ai_api_key(api_key: str) -> bool:
-    ...
+def validate_ai_api_key(api_key: str) -> bool: ...
+
 
 def get_provider_config() -> dict:
     return {
         "Gemini": {"key": "gemini_api_key", "url": "Google AI Studio"},
         "OpenAI": {"key": "openai_api_key", "url": "OpenAI Dashboard"},
-        "Anthropic": {"key": "anthropic_api_key", "url": "Anthropic Console"}
+        "Anthropic": {"key": "anthropic_api_key", "url": "Anthropic Console"},
     }
+
 
 def get_model_roles() -> list[str]:
     return ["reader", "writer", "researcher"]

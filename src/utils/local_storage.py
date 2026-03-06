@@ -1,14 +1,16 @@
 import streamlit as st
 from streamlit_local_storage import LocalStorage
 
+
 def get_local_storage():
     if "storage_bridge" not in st.session_state:
         st.session_state.storage_bridge = LocalStorage()
     return st.session_state.storage_bridge
 
+
 def get_browser_key(key_type: str, storage: LocalStorage, setting_type: str):
     """
-    Fetches a specific key from browser storage and 
+    Fetches a specific key from browser storage and
     hydrates the Pydantic session state object.
     """
     settings = getattr(st.session_state.pipeline_settings, setting_type)
@@ -18,6 +20,7 @@ def get_browser_key(key_type: str, storage: LocalStorage, setting_type: str):
         setattr(settings, key_type, stored_val)
         return stored_val
     return getattr(settings, key_type, None)
+
 
 def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type: str):
     """
@@ -29,11 +32,12 @@ def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type
 
     if new_key != current_val and new_key != None:
         browser_key = f"{setting_type}_{key_name}"
-        setattr(settings, key_name, new_key) 
-        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")      
-        
-        return True  
+        setattr(settings, key_name, new_key)
+        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")
+
+        return True
     return False
+
 
 def save_provider_config(provider: str, model_map: dict, storage: LocalStorage):
     """

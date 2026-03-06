@@ -231,7 +231,6 @@ def fetch_raw_job_data(global_store, job_url) -> RawJobMatch:
     result = global_store.get(ids=[job_url])
     if len(result.get("metadatas")) > 0:
         return RawJobMatch(**result.get("metadatas")[0])
-    
 
 
 def delete_profile(store, profile_id):

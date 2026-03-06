@@ -1,4 +1,5 @@
 """Tools to be used by the agents"""
+
 from logging import info
 import asyncio
 from typing import List
@@ -7,7 +8,7 @@ import re
 import httpx
 from rapidfuzz import fuzz
 
-from src.schema import ListRawJobMatch, RawJobMatch
+from src.schema import ListRawJobMatch, RawJobMatch, ScraperSettings
 from src.utils.func import get_serpapi_key
 
 
@@ -26,19 +27,22 @@ def extract_best_url(job_result: dict | None) -> str:
 
 
 async def scrape_for_jobs(
-    client: httpx.Client, role_keywords: str, location: str, distance: int = 40
+    client: httpx.Client,
+    role_keywords: str,
+    location: str,
+    scraper_settings: ScraperSettings,
 ) -> list[RawJobMatch]:
     """Uses the SerpAPI to get a list of jobs"""
     print(
-        f"Searching for {role_keywords} roles in {location} within {distance} miles/km"
+        f"Searching for {role_keywords} roles in {location} within {scraper_settings.distance_param} km"
     )
     params = {
         "engine": "google_jobs",
         "q": role_keywords,
         "location": location,
         "hl": "en",
-        "lrad": str(distance),
-        "gl": "uk",
+        "lrad": str(scraper_settings.distance_param),
+        "gl": scraper_settings.region,
         "api_key": get_serpapi_key(),
     }
     response = await client.get(
@@ -74,7 +78,7 @@ def format_results(job: dict) -> list[RawJobMatch]:
 
 
 async def batch_scrape_jobs(
-    queries: List[str], location: str, distance: int = 40
+    queries: List[str], location: str, scraper_settings: ScraperSettings
 ) -> ListRawJobMatch:
     """Performs multiple Asynchronous SerpAPI calls and returns a single ListRawJobMatch.
     Queries should be a list of search strings"""
@@ -82,7 +86,9 @@ async def batch_scrape_jobs(
     location = location.lower().replace("uk", "united kingdom")
 
     async with httpx.AsyncClient() as client:
-        tasks = [scrape_for_jobs(client, q, location, distance) for q in queries]
+        tasks = [
+            scrape_for_jobs(client, q, location, scraper_settings) for q in queries
+        ]
         results = await asyncio.gather(*tasks)
 
     for search_result in results:
@@ -96,15 +102,16 @@ async def batch_scrape_jobs(
     print(f"BATCH SCRAPE COMPLETE: found {len(final_jobs)}")
     return ListRawJobMatch(jobs=final_jobs)
 
+
 def sanitize_query(q: str) -> str:
     q = q.upper().strip()
-    q = re.sub(r'\s+', ' ', q)
-    
-    clean = q.replace('(', '').replace(')', '').replace("-", "")
+    q = re.sub(r"\s+", " ", q)
+
+    clean = q.replace("(", "").replace(")", "").replace("-", "")
     terms = [t.strip() for t in clean.split(" OR ")]
-    
+
     unique_terms = sorted(list(set(t for t in terms if t)))
-    
+
     return " OR ".join(unique_terms)
 
 
@@ -121,7 +128,7 @@ def filter_redundant_queries(queries, threshold=85):
             if score >= threshold:
                 is_redundant = True
                 break
-        
+
         if not is_redundant:
             unique_queries.append(q)
     return unique_queries

@@ -10,8 +10,9 @@ from src.schema import (
     ListRawJobMatch,
     RawJobMatch,
     AnalysedJobMatchWithMeta,
-    SearchQueryPlan
+    SearchQueryPlan,
 )
+
 
 @fixture
 def mock_streamlit(monkeypatch):
@@ -22,6 +23,7 @@ def mock_streamlit(monkeypatch):
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets
 
+
 @fixture
 def mock_env(monkeypatch):
     mock_env_dict = {}
@@ -29,18 +31,20 @@ def mock_env(monkeypatch):
     monkeypatch.setattr("your_module.ENV", mock_env_dict)
     return mock_env_dict
 
+
 @fixture
 def mock_search_query_plan():
     return SearchQueryPlan(
-        queries=["Data Engineer", "Python Developer"],
-        reasoning="Because"
+        queries=["Data Engineer", "Python Developer"], reasoning="Because"
     )
+
 
 @fixture(autouse=True)
 def mock_streamlit_secrets(monkeypatch):
     mock_secrets = {}
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_secrets
+
 
 @fixture
 def mock_chroma_store():
@@ -59,11 +63,13 @@ def test_db_env():
     if path.exists("./test_chroma_db"):
         rmtree("./test_chroma_db")
 
+
 @fixture
 def mock_env(monkeypatch):
     mock_env_dict = {}
     monkeypatch.setattr("src.utils.func.ENV", mock_env_dict)
     return mock_env_dict
+
 
 @fixture
 def mock_config():

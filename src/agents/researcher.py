@@ -1,4 +1,5 @@
 """Researched for jobs using SerpAPI"""
+
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -14,6 +15,7 @@ from src.utils.vector_handler import (
 )
 from src.utils.func import log_message
 from src.utils.embeddings_handler import get_embeddings
+
 
 def create_researcher_agent(research_llm):
     system_prompt = """You are an Expert Search Strategist. 
@@ -75,7 +77,7 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
         f"TASK: Create API query strings for target role {target_roles} "
         f"based on this profile: {profile.model_dump_json()}."
     )
-    
+
     new_message = [HumanMessage(content=prompt_content)]
     response = await agent.ainvoke(
         {**state, "messages": state["messages"] + new_message}

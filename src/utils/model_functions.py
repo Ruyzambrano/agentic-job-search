@@ -4,7 +4,6 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
 
-
 def get_model_index(models_list: list[dict], current_model_id: str) -> int:
     """Finds the integer index of the saved model ID in the current options list."""
     ids = [m["id"] for m in models_list]
@@ -16,9 +15,20 @@ def get_model_index(models_list: list[dict], current_model_id: str) -> int:
 
 def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
     if free_tier:
-        return [{"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite | 🧠 (Deep Reasoning) | ⚡ (Fast)"},
-                {"id": "gemini-3-flash-preview","label": "Gemini 3 Flash Preview  | 🧠 (Deep Reasoning) | ⚡ (Fast)"},
-                 {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash | 🧠 (Deep Reasoning) | ⚡ (Fast)"}]
+        return [
+            {
+                "id": "gemini-2.5-flash-lite",
+                "label": "Gemini 2.5 Flash Lite | 🧠 (Deep Reasoning) | ⚡ (Fast)",
+            },
+            {
+                "id": "gemini-3-flash-preview",
+                "label": "Gemini 3 Flash Preview  | 🧠 (Deep Reasoning) | ⚡ (Fast)",
+            },
+            {
+                "id": "gemini-2.5-flash",
+                "label": "Gemini 2.5 Flash | 🧠 (Deep Reasoning) | ⚡ (Fast)",
+            },
+        ]
     try:
         client = genai.Client(api_key=api_key)
         models = [m for m in client.models.list()]
@@ -27,47 +37,59 @@ def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
         models = ["gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash"]
     return models
 
+
 def get_gemini_text_models(models: list, free_tier: bool = False):
-        if free_tier:
-            return models
-        suitable_models = []
-        for m in models:
-            if not is_valid_model(m):
-                continue
-            
-            model_id = m.name.split('/')[-1]
-
-            label = model_id
-            if m.thinking:
-                label += " | 🧠 (Deep Reasoning)"
-            if "flash" in model_id:
-                label += " | ⚡ (Fast)"
-
-            suitable_models.append({"id": model_id, "label": label})
-
-        return sorted(suitable_models, key=lambda model: model.get("id"), reverse=True)
-
-def get_gemini_embedding_model_options(models: list, free_tier: bool=False):
+    if free_tier:
+        return models
     suitable_models = []
-    for m in models: 
-        if "embedContent" in m.supported_actions:
-            suitable_models.append({
-                "id": m.name.split("/")[-1],
-                "label": m.display_name
-            })
-    return suitable_models
+    for m in models:
+        if not is_valid_model(m):
+            continue
 
+        model_id = m.name.split("/")[-1]
+
+        label = model_id
+        if m.thinking:
+            label += " | 🧠 (Deep Reasoning)"
+        if "flash" in model_id:
+            label += " | ⚡ (Fast)"
+
+        suitable_models.append({"id": model_id, "label": label})
+
+    return sorted(suitable_models, key=lambda model: model.get("id"), reverse=True)
+
+
+def get_gemini_embedding_model_options(models: list, free_tier: bool = False):
+    suitable_models = []
+    for m in models:
+        if "embedContent" in m.supported_actions:
+            suitable_models.append(
+                {"id": m.name.split("/")[-1], "label": m.display_name}
+            )
+    return suitable_models
 
 
 def is_valid_model(model):
     if "generateContent" not in model.supported_actions:
         return False
-    model_id = model.name.split('/')[-1].lower()
+    model_id = model.name.split("/")[-1].lower()
     if "gemini" not in model.name.lower():
         return False
-    
-    return not any(x in model_id for x in ["tts", "robotic", "experimental", "vision", "embedding", "aqa", "image", "computer"])
-        
+
+    return not any(
+        x in model_id
+        for x in [
+            "tts",
+            "robotic",
+            "experimental",
+            "vision",
+            "embedding",
+            "aqa",
+            "image",
+            "computer",
+        ]
+    )
+
 
 def get_llm_model(api_settings, role):
     """Allows user to define different models for each step of the pipeline"""
@@ -77,25 +99,24 @@ def get_llm_model(api_settings, role):
         return ChatGoogleGenerativeAI(
             model=model_id or "gemini-2.5-flash-lite",
             api_key=api_settings.gemini_api_key,
-            temperature=0.1
+            temperature=0.1,
         )
-    
+
     elif provider == "openai":
         return ChatOpenAI(
             model=model_id or "gpt-4o-mini",
             api_key=api_settings.openai_api_key,
-            temperature=0.1
+            temperature=0.1,
         )
-        
+
     elif provider == "anthropic":
         return ChatAnthropic(
             model=model_id or "claude-3-5-haiku",
             api_key=api_settings.anthropic_api_key,
-            temperature=0.1
+            temperature=0.1,
         )
     raise ProviderError(f"{provider.title()} is not supported.")
 
 
 def get_gemini_embedding_model(model_id, api_key):
-    return GoogleGenerativeAIEmbeddings(model=model_id,
-                                            api_key=api_key)
+    return GoogleGenerativeAIEmbeddings(model=model_id, api_key=api_key)

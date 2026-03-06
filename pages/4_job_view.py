@@ -4,11 +4,14 @@ from src.utils.streamlit_utils import (
     display_full_job,
     find_all_candidate_profiles,
     render_sidebar_feed,
-    init_app
+    init_app,
 )
-from src.utils.streamlit_cache import cached_jobs_all_user_profiles, get_cached_user_store, get_cached_global_store
+from src.utils.streamlit_cache import (
+    cached_jobs_all_user_profiles,
+    get_cached_user_store,
+    get_cached_global_store,
+)
 from src.utils.embeddings_handler import get_embeddings
-
 
 
 def show_specific_job():

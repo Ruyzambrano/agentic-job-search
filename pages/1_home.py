@@ -1,4 +1,5 @@
 """See your profiles and Jobs"""
+
 import streamlit as st
 
 from src.utils.streamlit_utils import (
@@ -8,14 +9,14 @@ from src.utils.streamlit_utils import (
     search_for_new_jobs,
     delete_profile_dialogue,
     cv_handler,
-    process_new_cv, 
+    process_new_cv,
     init_app,
-    )
+)
 from src.utils.embeddings_handler import get_embeddings
 from src.utils.streamlit_cache import (
     get_cached_global_store,
     get_cached_jobs_for_profile,
-    get_cached_user_store
+    get_cached_user_store,
 )
 
 
@@ -35,8 +36,8 @@ def main_page():
             st.write("Analyzing CV...")
             analysis = process_new_cv(
                 st.session_state.raw_cv_text,
-                st.session_state.desired_role, 
-                st.session_state.desired_location
+                st.session_state.desired_role,
+                st.session_state.desired_location,
             )
             st.session_state["job_analysis"] = analysis
             st.session_state.start_processing = False
@@ -78,7 +79,9 @@ def main_page():
             use_container_width=True,
             type="primary",
         ):
-            delete_profile_dialogue(user_vector_store, active_profile_meta.get("profile_id"))
+            delete_profile_dialogue(
+                user_vector_store, active_profile_meta.get("profile_id")
+            )
             get_cached_jobs_for_profile.clear()
 
     display_profile(profile=active_profile_meta)

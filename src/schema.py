@@ -36,13 +36,17 @@ class RawJobMatch(BaseModel):
 class ListRawJobMatch(BaseModel):
     jobs: List[RawJobMatch] = Field("A list of raw job match objects")
 
+
 class SearchQueryPlan(BaseModel):
-    queries: list[str] = Field(description="A list of 5-10 optimized Google Jobs search strings")
+    queries: list[str] = Field(
+        description="A list of 5-10 optimized Google Jobs search strings"
+    )
     reasoning: str = Field(description="Why these specific terms were chosen")
+
+
 class AnalysedJobMatch(BaseModel):
     title: str = Field(description="The title of the job listing")
-    company: str = Field(
-        description="The name of the company")
+    company: str = Field(description="The name of the company")
     job_url: str = Field(description="The URL of the job advert")
     location: str = Field(
         description="The location of the role, as granular as possible"
@@ -130,10 +134,11 @@ class AgentWeights(BaseModel):
     seniority_weight: int = Field(default=75)
     retention_risk: bool = Field(default=True)
 
+
 class ScraperSettings(BaseModel):
     distance_param: int = Field(default=40)
-    max_results: int = Field(default=10)
     region: str = Field(default="uk")
+
 
 class ApiSettings(BaseModel):
     ai_provider: str = ""
@@ -150,12 +155,13 @@ class ApiSettings(BaseModel):
     openai_reader: str = "gpt-4o-mini"
     openai_writer: str = "gpt-4o"
     openai_researcher: str = "gpt-5"
-    
+
     anthropic_api_key: str = ""
     claude_reader: str = "claude-3-5-haiku"
     claude_writer: str = "claude-3-5-sonnet"
     claude_researcher: str = "claude-3-5-sonnet"
-    
+
+
 class PipelineSettings(BaseModel):
     weights: AgentWeights = Field(default_factory=AgentWeights)
     scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)

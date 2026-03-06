@@ -3,15 +3,43 @@ from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
 
 
-from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch, PipelineSettings, AgentWeights
+from src.schema import (
+    AnalysedJobMatch,
+    AnalysedJobMatchWithMeta,
+    RawJobMatch,
+    PipelineSettings,
+    AgentWeights,
+)
 from src.utils.vector_handler import (
     find_all_candidate_profiles,
     fetch_raw_job_data,
     delete_profile,
 )
-from src.utils.local_storage import get_browser_key, set_new_key, save_provider_config, get_local_storage
-from src.utils.func import format_salary_as_range, iso_formatter, normalize, get_job_val, filter_jobs_by_keywords, get_weight_map, sort_analysed_job_matches_with_meta, sort_raw_job_matches_with_meta, extract_base_locations, get_provider_config, get_model_roles, validate_configuration
-from src.utils.model_functions import get_gemini_text_models, get_model_index, get_all_gemini_models, get_gemini_embedding_model_options, get_gemini_embedding_model, get_llm_model
+from src.utils.local_storage import (
+    get_browser_key,
+    set_new_key,
+    save_provider_config,
+    get_local_storage,
+)
+from src.utils.func import (
+    format_salary_as_range,
+    iso_formatter,
+    normalize,
+    get_job_val,
+    filter_jobs_by_keywords,
+    get_weight_map,
+    sort_analysed_job_matches_with_meta,
+    sort_raw_job_matches_with_meta,
+    extract_base_locations,
+    get_provider_config,
+    get_model_roles,
+)
+from src.utils.model_functions import (
+    get_gemini_text_models,
+    get_model_index,
+    get_all_gemini_models,
+    get_gemini_embedding_model_options,
+)
 from src.utils.embeddings_handler import validate_and_get_models
 from src.utils.streamlit_cache import get_job_analysis, get_cv_text
 
@@ -118,12 +146,12 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
             "user_id": st.user.sub if st.user else "local-user",
             "location": desired_location,
             "role": desired_role,
-            "pipeline_settings": st.session_state.pipeline_settings
+            "pipeline_settings": st.session_state.pipeline_settings,
         }
     }
     models = validate_and_get_models()
     return get_job_analysis(raw_cv_text, config, models)
-        
+
 
 def search_for_new_jobs(active_profile_meta: dict, user_id):
     selected_profile_id = active_profile_meta.get("profile_id")
@@ -134,13 +162,12 @@ def search_for_new_jobs(active_profile_meta: dict, user_id):
             "active_profile_id": selected_profile_id,
             "location": st.session_state.get("desired_location", ""),
             "role": st.session_state.get("desired_role", ""),
-            "pipeline_settings": st.session_state.pipeline_settings
+            "pipeline_settings": st.session_state.pipeline_settings,
         }
     }
     models = validate_and_get_models()
     with st.status("Searching for jobs using existing profile..."):
         return get_job_analysis("", config, models)
-
 
 
 def jobs_filter_sidebar(jobs: list):
@@ -422,6 +449,7 @@ def match_all_jobs_for_setting_or_schedule(jobs: list[RawJobMatch], attribute: s
 def matches_setting_or_schedule(job: RawJobMatch, attribute: str) -> bool:
     return job.schedule_type == attribute or job.work_setting
 
+
 def scoring_weights_setting_tab(storage: LocalStorage):
     st.subheader("Match Scoring Weights")
     st.caption("Influence how the Critical Recruitment Auditor ranks candidates.")
@@ -432,76 +460,86 @@ def scoring_weights_setting_tab(storage: LocalStorage):
     col1, col2 = st.columns(2)
     with col1:
         new_weights_map["tech_stack"] = st.select_slider(
-            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.tech_stack)}])", 
+            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.tech_stack)}])",
             options=reversed_weight_map,
             format_func=reversed_weight_map.get,
-            value=weights.tech_stack
+            value=weights.tech_stack,
         )
 
         new_weights_map["experience"] = st.select_slider(
             f"Experience Importance (:blue[Currently {reversed_weight_map.get(weights.experience)}])",
             options=reversed_weight_map,
             format_func=reversed_weight_map.get,
-            value=weights.experience
+            value=weights.experience,
         )
 
     with col2:
-        new_weights_map["seniority_weight"]  = st.select_slider(
+        new_weights_map["seniority_weight"] = st.select_slider(
             f"Seniority Alignment (:blue[Currently {reversed_weight_map.get(weights.seniority_weight)}])",
             options=reversed_weight_map,
             format_func=reversed_weight_map.get,
-            value=weights.seniority_weight
+            value=weights.seniority_weight,
         )
-        
-        new_weights_map["retention_risk"] = st.toggle("Enable Retention Risk", value=weights.retention_risk)
+
+        new_weights_map["retention_risk"] = st.toggle(
+            "Enable Retention Risk", value=weights.retention_risk
+        )
     save_settings(new_weights_map, "weights", storage)
+
 
 def scraping_settings_tab(storage: LocalStorage):
     st.subheader("SerpAPI Configuration")
     current_params = st.session_state.pipeline_settings.scraper_settings
     new_params = {}
-    new_params["distance_param"] = st.number_input("Search Distance (km/miles)", value=current_params.distance_param, step=5)
+    new_params["distance_param"] = st.number_input(
+        "Search Distance (km)", value=current_params.distance_param, step=5
+    )
     regions = ["uk", "us"]
     idx_region = regions.index(current_params.region)
-    new_params["region"] = st.selectbox("Search Region", options=regions, index=idx_region, format_func=lambda x: x.upper())
-    new_params["max_results"] = st.number_input("Max Results per Query", value=current_params.max_results, max_value=50)
+    new_params["region"] = st.selectbox(
+        "Search Region",
+        options=regions,
+        index=idx_region,
+        format_func=lambda x: x.upper(),
+    )
     save_settings(new_params, "scraper_settings", storage)
+
 
 def vector_storage_setting_tab(storage: LocalStorage):
     """TODO: Implement GDPR stuff"""
     st.subheader("Vector Store Management")
     st.warning("Pruning the database is permanent. Use with caution.")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Global Raw Jobs", "1,240", delta="+12 today")
         if st.button("Clean Expired Jobs", use_container_width=True):
             st.toast("Checking for expired listings...")
-    
+
     with col2:
-        st.metric("Active User Profiles", f"{len(st.session_state.get('profiles', []))}")
+        st.metric(
+            "Active User Profiles", f"{len(st.session_state.get('profiles', []))}"
+        )
         if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
             st.success("App cache cleared.")
+
 
 def render_settings_page():
     storage = get_local_storage()
     st.title("⚙️ Pipeline Settings")
     st.markdown("Configure the behavior of the AI agents and data processing pipeline.")
     show_success_toast()
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🧠 Agent Logic", 
-        "📡 Scraping", 
-        "💾 Database", 
-        "🔑 Integrations"
-    ])
-    
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["🧠 Agent Logic", "📡 Scraping", "💾 Database", "🔑 Integrations"]
+    )
+
     with tab1:
         scoring_weights_setting_tab(storage)
 
     with tab2:
         scraping_settings_tab(storage)
-        
+
     with tab3:
         vector_storage_setting_tab(storage)
 
@@ -510,11 +548,17 @@ def render_settings_page():
 
     st.markdown("---")
 
-def save_settings(new_data: dict, setting_type: str, storage:LocalStorage):
+
+def save_settings(new_data: dict, setting_type: str, storage: LocalStorage):
     col_save, col_reset, _ = st.columns([1, 1, 2])
     with col_save:
-        if st.button("Save Settings", type="primary", key=f"save_{setting_type}", width="stretch"):
-            changes_made = [set_new_key(key, value, storage, setting_type) for key, value in new_data.items()]
+        if st.button(
+            "Save Settings", type="primary", key=f"save_{setting_type}", width="stretch"
+        ):
+            changes_made = [
+                set_new_key(key, value, storage, setting_type)
+                for key, value in new_data.items()
+            ]
             if any(changes_made):
                 st.session_state.updated_setting = True
                 st.rerun()
@@ -525,32 +569,28 @@ def save_settings(new_data: dict, setting_type: str, storage:LocalStorage):
             st.session_state.reset_settings = True
             st.rerun()
 
+
 def show_success_toast():
     if st.session_state.get("changed_api_key"):
-        st.toast("Changed AI API Key",
-                 icon=":material/api:")
+        st.toast("Changed AI API Key", icon=":material/api:")
         st.session_state.changed_api_key = False
     if st.session_state.get("changed_provider"):
-        st.toast("Changed AI Provider",
-                 icon=":material/smart_toy:")
+        st.toast("Changed AI Provider", icon=":material/smart_toy:")
         st.session_state.changed_provider = False
     if st.session_state.get("changed_serpapi"):
-        st.toast("Changed SerpAPI API Key",
-                 icon=":material/work_alert:")
+        st.toast("Changed SerpAPI API Key", icon=":material/work_alert:")
         st.session_state.changed_serpapi = False
     if st.session_state.get("updated_models"):
-        st.toast("Updated Model Configuration",
-                 icon=":material/model_training:")
+        st.toast("Updated Model Configuration", icon=":material/model_training:")
         st.session_state.updated_models = False
     if st.session_state.get("updated_setting"):
-        st.toast("Settings Updated",
-                 icon=":material/exercise:")
+        st.toast("Settings Updated", icon=":material/exercise:")
         st.session_state.updated_setting = False
-        
+
     if st.session_state.get("reset_settings"):
-        st.toast("Settings Reset",
-                 icon=":material/refresh:")
-        st.session_state.reset_settings = False 
+        st.toast("Settings Reset", icon=":material/refresh:")
+        st.session_state.reset_settings = False
+
 
 def hydrate_keys(storage: LocalStorage):
     st.session_state.provider_config = get_provider_config()
@@ -567,16 +607,17 @@ def hydrate_keys(storage: LocalStorage):
     for k in keys_to_fetch:
         old_val = getattr(st.session_state.pipeline_settings.api_settings, k, None)
         new_val = get_browser_key(k, storage, "api_settings")
-        
+
         if new_val and new_val != old_val:
             new_data_found = True
 
     if new_data_found:
         st.rerun()
 
+
 def hydrate_settings(setting_type: str, keys: list[str], storage: LocalStorage):
     for key in keys:
-        get_browser_key(key, storage, setting_type)   
+        get_browser_key(key, storage, setting_type)
 
 
 @st.fragment
@@ -585,31 +626,39 @@ def render_api_settings(storage: LocalStorage):
     api = st.session_state.pipeline_settings.api_settings
 
     all_providers = list(st.session_state.provider_config.keys())
-    idx = all_providers.index(api.ai_provider) if api.ai_provider in all_providers else 0
+    idx = (
+        all_providers.index(api.ai_provider) if api.ai_provider in all_providers else 0
+    )
     new_provider = st.selectbox("AI Provider", all_providers, index=idx)
     config = st.session_state.provider_config[new_provider]
     new_api_key = st.text_input(
-        f"{new_provider} API Key", 
-        type="password", 
-        value=getattr(api, config["key"]), 
-        help=f"Get your key from {config['url']}"
+        f"{new_provider} API Key",
+        type="password",
+        value=getattr(api, config["key"]),
+        help=f"Get your key from {config['url']}",
     ).strip()
 
     new_serpapi_key = st.text_input(
-        "SerpAPI Key", 
-        type="password", 
+        "SerpAPI Key",
+        type="password",
         value=api.serpapi_key,
-        help="Used for live job searching"
+        help="Used for live job searching",
     ).strip()
 
     # TODO: Slack integrations
     # st.text_input("Slack Webhook", placeholder="https://hooks.slack.com/services/...", help="Optional: Send job alerts to Slack.")
 
     if st.button("Save Keys to Browser", key="set_keys"):
-        st.session_state.changed_api_key = set_new_key(config["key"], new_api_key, storage, "api_settings")
-        st.session_state.changed_provider = set_new_key("ai_provider", new_provider, storage, "api_settings")
-        st.session_state.changed_serpapi = set_new_key("serpapi_key", new_serpapi_key, storage, "api_settings")
-    
+        st.session_state.changed_api_key = set_new_key(
+            config["key"], new_api_key, storage, "api_settings"
+        )
+        st.session_state.changed_provider = set_new_key(
+            "ai_provider", new_provider, storage, "api_settings"
+        )
+        st.session_state.changed_serpapi = set_new_key(
+            "serpapi_key", new_serpapi_key, storage, "api_settings"
+        )
+
     st.write(":red[To see a full list of models, enter your API Key below]")
     active_key = getattr(api, config["key"])
     if active_key:
@@ -628,17 +677,22 @@ def set_models_for_pipeline(new_provider: str) -> dict:
         all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
         text_models = get_gemini_text_models(all_models, free_tier)
         embedding_models = get_gemini_embedding_model_options(all_models)
-        return get_models_for_pipelines(text_models, embedding_models, new_provider.lower())
+        return get_models_for_pipelines(
+            text_models, embedding_models, new_provider.lower()
+        )
     # TODO: Implement openai and anthropic
     # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
     #     st.header("TODO: Get models")
+
 
 @st.cache_data
 def get_model_cache(api_key: str, free_tier: bool = False):
     return get_all_gemini_models(api_key, free_tier)
 
-    
-def get_models_for_pipelines(text_models: list[dict], embedding_models: list[dict], new_provider: str):
+
+def get_models_for_pipelines(
+    text_models: list[dict], embedding_models: list[dict], new_provider: str
+):
     api = st.session_state.pipeline_settings.api_settings
     current_reader = getattr(api, f"{new_provider}_reader")
     current_writer = getattr(api, f"{new_provider}_writer")
@@ -647,75 +701,91 @@ def get_models_for_pipelines(text_models: list[dict], embedding_models: list[dic
     if st.toggle("Use different models for the agents?", value=True):
         reader, researcher, writer = st.columns(3)
         with reader:
-            reader_model = st.selectbox("Select a CV Parser", 
-                                  options=text_models, 
-                                  format_func=lambda x: x.get("label").title().replace("-", " "),
-                                  key=f"select_{new_provider}_reader", 
-                                  index=get_model_index(text_models, current_reader))
+            reader_model = st.selectbox(
+                "Select a CV Parser",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_reader",
+                index=get_model_index(text_models, current_reader),
+            )
         with researcher:
-            researcher_model = st.selectbox("Select a Researcher", 
-                                  options=text_models, 
-                                  format_func=lambda x: x.get("label").title().replace("-", " "),
-                                  key=f"select_{new_provider}_researcher",
-                                  index=get_model_index(text_models, current_researcher))
+            researcher_model = st.selectbox(
+                "Select a Researcher",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_researcher",
+                index=get_model_index(text_models, current_researcher),
+            )
         with writer:
-            writer_model = st.selectbox("Select an Analyser", 
-                                  options=text_models, 
-                                  format_func=lambda x: x.get("label").title().replace("-", " "),
-                                  key=f"select_{new_provider}_writer",
-                                  index=get_model_index(text_models, current_writer))
+            writer_model = st.selectbox(
+                "Select an Analyser",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_writer",
+                index=get_model_index(text_models, current_writer),
+            )
     else:
-        reader_model = st.selectbox("Select an Embedder", 
-                                  options=text_models, 
-                                  format_func=lambda x: x.get("label").title().replace("-", " "),
-                                  key=f"select_{new_provider}_all_nodes",
-                                  index=get_model_index(text_models, current_reader))
+        reader_model = st.selectbox(
+            "Select an Embedder",
+            options=text_models,
+            format_func=lambda x: x.get("label").title().replace("-", " "),
+            key=f"select_{new_provider}_all_nodes",
+            index=get_model_index(text_models, current_reader),
+        )
         researcher_model = reader_model
         writer_model = researcher_model
     with reader:
-        embedding_model = st.selectbox("Select a Model", 
-                                  options=embedding_models, 
-                                  format_func=lambda x: x.get("label").title().replace("-", " "),
-                                  key=f"select_{new_provider}_embedding",
-                                  index=get_model_index(embedding_models, current_embedding))
+        embedding_model = st.selectbox(
+            "Select a Model",
+            options=embedding_models,
+            format_func=lambda x: x.get("label").title().replace("-", " "),
+            key=f"select_{new_provider}_embedding",
+            index=get_model_index(embedding_models, current_embedding),
+        )
     return {
-            "reader": reader_model.get("id"),
-            "writer": writer_model.get("id"),
-            "researcher": researcher_model.get("id"),
-            "embedding": embedding_model.get("id")
-        }  
-     
-def get_model_options(models):
-    return st.selectbox("Select a CV Parser", options=models, format_func=lambda model: model.title().replace("-", " "), key=f"select_{key_string}")
+        "reader": reader_model.get("id"),
+        "writer": writer_model.get("id"),
+        "researcher": researcher_model.get("id"),
+        "embedding": embedding_model.get("id"),
+    }
 
+
+def get_model_options(models):
+    return st.selectbox(
+        "Select a CV Parser",
+        options=models,
+        format_func=lambda model: model.title().replace("-", " "),
+        key=f"select_{key_string}",
+    )
 
 
 @st.dialog("New CV")
 def cv_handler():
     new_cv = st.file_uploader("Upload a new CV (PDF, DOCX)", type=["pdf", "docx"])
-    
+
     if new_cv:
         with st.spinner("Extracting text..."):
             text = get_cv_text(new_cv)
             st.session_state.raw_cv_text = text
-            
+
     if st.session_state.get("raw_cv_text"):
         st.success("CV read successfully!")
         role = st.text_input("Desired Role", value="Data Engineer")
         loc = st.text_input("Desired Location", value="London")
-        
+
         if st.button("Analyze & Find Jobs"):
             st.session_state.start_processing = True
             st.session_state.desired_role = role
             st.session_state.desired_location = loc
             st.rerun()
 
+
 def initialise_pipeline_settings():
     """Initializes default settings in session state if not already present."""
     pipeline_settings = st.session_state.get("pipeline_settings")
     if not pipeline_settings or not isinstance(pipeline_settings, PipelineSettings):
         st.session_state.pipeline_settings = PipelineSettings()
-    
+
 
 def reset_setting_to_default_values(setting: str, storage: LocalStorage):
     if setting == "weights":
@@ -723,11 +793,16 @@ def reset_setting_to_default_values(setting: str, storage: LocalStorage):
         for key, value in weights.items():
             set_new_key(key, value, storage, setting)
 
+
 def init_app():
     initialise_pipeline_settings()
     storage = get_local_storage()
     hydrate_keys(storage)
-    hydrate_settings("weights", ["tech_stack", "seniority_weight", "experience", "retention_risk"], storage)
-    hydrate_settings("scraper_settings", ["region", "max_results", "distance_param"] , storage)
-
-
+    hydrate_settings(
+        "weights",
+        ["tech_stack", "seniority_weight", "experience", "retention_risk"],
+        storage,
+    )
+    hydrate_settings(
+        "scraper_settings", ["region", "max_results", "distance_param"], storage
+    )
