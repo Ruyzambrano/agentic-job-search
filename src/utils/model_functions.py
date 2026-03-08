@@ -3,6 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
+from src.utils.func import ProviderError
 
 def get_model_index(models_list: list[dict], current_model_id: str) -> int:
     """Finds the integer index of the saved model ID in the current options list."""
@@ -59,16 +60,6 @@ def get_gemini_text_models(models: list, free_tier: bool = False):
     return sorted(suitable_models, key=lambda model: model.get("id"), reverse=True)
 
 
-def get_gemini_embedding_model_options(models: list, free_tier: bool = False):
-    suitable_models = []
-    for m in models:
-        if "embedContent" in m.supported_actions:
-            suitable_models.append(
-                {"id": m.name.split("/")[-1], "label": m.display_name}
-            )
-    return suitable_models
-
-
 def is_valid_model(model):
     if "generateContent" not in model.supported_actions:
         return False
@@ -118,5 +109,5 @@ def get_llm_model(api_settings, role):
     raise ProviderError(f"{provider.title()} is not supported.")
 
 
-def get_gemini_embedding_model(model_id, api_key):
-    return GoogleGenerativeAIEmbeddings(model=model_id, api_key=api_key)
+def get_gemini_embedding_model(embedding_model: str, api_key: str):
+    return GoogleGenerativeAIEmbeddings(model=embedding_model, api_key=api_key)

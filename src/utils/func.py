@@ -1,7 +1,6 @@
 import logging
 import json
 from os import environ as ENV
-from typing import Literal
 from datetime import datetime
 import re
 
@@ -95,12 +94,12 @@ def pretty_print_jobs_with_rich(json_string):
             f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
         )
         table.add_row("Salary", salary_display)
-        tech_display = (
-            ", ".join(job["tech_stack"])
-            if isinstance(job["tech_stack"], list)
+        skill_display = (
+            ", ".join(job["key_skills"])
+            if isinstance(job["key_skills"], list)
             else "N/A"
         )
-        table.add_row("Tech Stack", tech_display)
+        table.add_row("Tech Stack", skill_display)
         attributes_display = (
             " • ".join(job["attributes"])
             if isinstance(job["attributes"], list)
@@ -132,35 +131,6 @@ def pretty_print_jobs_with_rich(json_string):
 
         console.print("\n")
 
-
-def get_active_api_key() -> str:
-    user_override = st.session_state.get("CUSTOM_API_KEY")
-    if user_override:
-        return user_override
-
-    secret_key = st.secrets.get("GEMINI_API_KEY")
-    if secret_key:
-        return secret_key
-
-    fallback_api_key = ENV.get("GEMINI_API_KEY")
-    if fallback_api_key:
-        return fallback_api_key
-    raise APIKeyError("No AI API key!")
-
-
-def get_model(model_type: str, provider: Literal["GEMINI", "OPEN_AI"]) -> str:
-    user_override = st.session_state.get(f"CUSTOM_{model_type}_MODEL")
-    if user_override:
-        return user_override
-    model_string = f"{model_type}_{provider}_MODEL".upper()
-    secret_key = st.secrets.get(model_string)
-    if secret_key:
-        return secret_key
-
-    fallback_model = ENV.get(model_string)
-    if fallback_model:
-        return fallback_model
-    raise ModelTypeError("No model set")
 
 
 def format_salary_as_range(salary_min: int, salary_max: int):
@@ -220,7 +190,7 @@ def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
                 str(getattr(job, "company", "")),
                 str(getattr(job, "job_summary", "")),
                 str(getattr(job, "location", "")),
-                " ".join(getattr(job, "tech_stack", []) or []),
+                " ".join(getattr(job, "key_skills", []) or []),
                 " ".join(getattr(job, "attributes", []) or []),
             ]
         ).lower()
@@ -290,9 +260,6 @@ def extract_base_locations(location_str: str) -> list[str]:
             clean_cities.append(p_clean.title())
 
     return sorted(list(set(clean_cities)))
-
-
-def validate_ai_api_key(api_key: str) -> bool: ...
 
 
 def get_provider_config() -> dict:

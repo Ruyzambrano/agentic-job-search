@@ -1,4 +1,5 @@
 """See your profiles and Jobs"""
+from time import time
 
 import streamlit as st
 
@@ -22,7 +23,7 @@ from src.utils.streamlit_cache import (
 
 def main_page():
     init_app()
-    embedding = get_embeddings(st.session_state.pipeline_settings.api_settings)
+    embedding = get_embeddings()
     user_vector_store = get_cached_user_store(embedding)
     global_jobs_store = get_cached_global_store(embedding)
 
@@ -41,6 +42,7 @@ def main_page():
             )
             st.session_state["job_analysis"] = analysis
             st.session_state.start_processing = False
+            st.session_state.last_updated = time()
             status.update(label="Analysis Complete!", state="complete")
             st.session_state.raw_cv_text = None
         st.rerun()
@@ -69,7 +71,7 @@ def main_page():
             st.session_state["job_analysis"] = search_for_new_jobs(
                 active_profile_meta, user_id
             )
-            get_cached_jobs_for_profile.clear()
+            st.session_state.last_updated = time()
         sorting = st.empty()
 
         st.divider()
@@ -82,12 +84,14 @@ def main_page():
             delete_profile_dialogue(
                 user_vector_store, active_profile_meta.get("profile_id")
             )
-            get_cached_jobs_for_profile.clear()
+            st.session_state.last_updated = time()
 
     display_profile(profile=active_profile_meta)
 
     jobs = get_cached_jobs_for_profile(
-        user_vector_store, active_profile_meta.get("profile_id")
+        user_vector_store, 
+        active_profile_meta.get("profile_id"),
+        st.session_state.last_updated
     )
 
     if jobs:

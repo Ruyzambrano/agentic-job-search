@@ -16,7 +16,7 @@ class MarketAnalytics:
             "key_skills",
             "industries",
             "qualifications",
-            "tech_stack",
+            "key_skills",
         ]
         for col in list_cols:
             if col in self.df_p.columns:

@@ -26,3 +26,4 @@ streamlit-local-storage
 google-genai
 langchain-openai
 langchain-anthropic
+langchain-pinecone

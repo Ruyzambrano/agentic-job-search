@@ -8,8 +8,7 @@ import re
 import httpx
 from rapidfuzz import fuzz
 
-from src.schema import ListRawJobMatch, RawJobMatch, ScraperSettings
-from src.utils.func import get_serpapi_key
+from src.schema import ListRawJobMatch, RawJobMatch, PipelineSettings
 
 
 def extract_best_url(job_result: dict | None) -> str:
@@ -30,12 +29,12 @@ async def scrape_for_jobs(
     client: httpx.Client,
     role_keywords: str,
     location: str,
-    scraper_settings: ScraperSettings,
+    pipeline_settings: PipelineSettings,
 ) -> list[RawJobMatch]:
     """Uses the SerpAPI to get a list of jobs"""
-    print(
-        f"Searching for {role_keywords} roles in {location} within {scraper_settings.distance_param} km"
-    )
+    scraper_settings = pipeline_settings.scraper_settings
+    print(f"Searching for {role_keywords} roles in {location} within {scraper_settings.distance_param} km")
+    
     params = {
         "engine": "google_jobs",
         "q": role_keywords,
@@ -43,7 +42,7 @@ async def scrape_for_jobs(
         "hl": "en",
         "lrad": str(scraper_settings.distance_param),
         "gl": scraper_settings.region,
-        "api_key": get_serpapi_key(),
+        "api_key": pipeline_settings.api_settings.serpapi_key,
     }
     response = await client.get(
         "https://serpapi.com/search?", params=params, timeout=30.0
@@ -78,7 +77,7 @@ def format_results(job: dict) -> list[RawJobMatch]:
 
 
 async def batch_scrape_jobs(
-    queries: List[str], location: str, scraper_settings: ScraperSettings
+    queries: List[str], location: str, pipeline_settings: PipelineSettings
 ) -> ListRawJobMatch:
     """Performs multiple Asynchronous SerpAPI calls and returns a single ListRawJobMatch.
     Queries should be a list of search strings"""
@@ -87,7 +86,7 @@ async def batch_scrape_jobs(
 
     async with httpx.AsyncClient() as client:
         tasks = [
-            scrape_for_jobs(client, q, location, scraper_settings) for q in queries
+            scrape_for_jobs(client, q, location, pipeline_settings) for q in queries
         ]
         results = await asyncio.gather(*tasks)
 

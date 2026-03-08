@@ -38,10 +38,9 @@ def get_cached_global_store(_embeddings):
 
 
 @st.cache_data(show_spinner="Fetching matched jobs...")
-def get_cached_jobs_for_profile(_store, profile_id):
+def get_cached_jobs_for_profile(_store, profile_id, last_updated=0.0):
     return find_all_roles_for_profile(_store, profile_id)
 
-
 @st.cache_data()
-def cached_jobs_all_user_profiles(_store, user_id):
+def cached_jobs_all_user_profiles(_store, user_id, last_updated=0.0):
     return find_all_roles_for_user(_store, user_id)

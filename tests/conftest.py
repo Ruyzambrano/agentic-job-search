@@ -1,16 +1,19 @@
 from os import environ as ENV, path
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from pytest import fixture
+from unittest.mock import patch
 from shutil import rmtree
 
-from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_store
 from src.schema import (
     CandidateProfile,
     ListRawJobMatch,
     RawJobMatch,
     AnalysedJobMatchWithMeta,
     SearchQueryPlan,
+    PipelineSettings,
+    ApiSettings,
+    AgentWeights
 )
 
 
@@ -18,16 +21,28 @@ from src.schema import (
 def mock_streamlit(monkeypatch):
     mock_session = {}
     mock_secrets = {}
-    # We use monkeypatch to replace the real streamlit attributes
     monkeypatch.setattr("streamlit.session_state", mock_session)
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets
 
+@fixture
+def mock_state():
+    return {"messages": []}
+
+@fixture
+def mock_settings():
+    """Provides a valid PipelineSettings object for testing logic."""
+    settings = PipelineSettings()
+    settings.api_settings = ApiSettings(
+        gemini_api_key="test_key",
+        ai_provider="Gemini"
+    )
+    settings.weights = AgentWeights(key_skills=80, experience=50)
+    return settings
 
 @fixture
 def mock_env(monkeypatch):
     mock_env_dict = {}
-    # Replace your ENV object with this dict
     monkeypatch.setattr("your_module.ENV", mock_env_dict)
     return mock_env_dict
 
@@ -63,6 +78,12 @@ def test_db_env():
     if path.exists("./test_chroma_db"):
         rmtree("./test_chroma_db")
 
+@fixture(autouse=True)
+def silent_embeddings():
+    """Stop all tests from actually hitting the embedding providers."""
+    with patch("src.utils.embeddings_handler.get_embeddings") as mock:
+        mock.return_value = MagicMock()
+        yield mock
 
 @fixture
 def mock_env(monkeypatch):
@@ -225,5 +246,5 @@ def mock_analysed_job_match_with_meta():
         location="hjad",
         qualifications=["Degree"],
         attributes=["Remote"],
-        tech_stack=["Python"],
+        key_skills=["Python"],
     )

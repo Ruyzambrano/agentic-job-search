@@ -1,3 +1,5 @@
+from time import time
+
 import streamlit as st
 
 from src.utils.streamlit_utils import (
@@ -12,17 +14,32 @@ from src.schema import RawJobMatch
 
 def global_job_list():
     init_app()
-    embeddings = get_embeddings(st.session_state.pipeline_settings.api_settings)
+        
+    embeddings = get_embeddings()
     global_store = get_cached_global_store(embeddings)
+
+    index = global_store.get_pinecone_index('agent-pipeline')
+    ns = global_store._namespace
+    
+    zero_vector = [0.0] * 3072 
+
+    results = index.query(
+        vector=zero_vector,
+        top_k=100,
+        namespace=ns,
+        include_metadata=True
+    )
+
+    jobs = []
+    for match in results.get("matches", []):
+        meta = match.get("metadata", {})
+        jobs.append(RawJobMatch(**meta))
 
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Posted Date", "Company", "Role"]
     )
-
-    jobs = [RawJobMatch(**job) for job in global_store.get().get("metadatas")]
-
+    
     jobs = jobs_filter_sidebar(jobs)
-
     display_raw_job_matches(jobs, sort_by)
 
 

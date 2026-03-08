@@ -27,7 +27,7 @@ Analyze the 'CandidateProfile' and generate a list of 8-10 high-intent search qu
 1. **Diversity**: Create a mix of queries. Some should be specific (Exact Job Title + City), others broader (Key Skills + Region).
 2. **Boolean Logic**: Use 'OR' to group similar titles, e.g., "('Data Engineer' OR 'Data Infrastructure') London".
 3. **No Postcodes**: Use city or town names only. 
-4. **Keyword Extraction**: Identify the 3 most unique technical skills in the profile and create at least two queries centered specifically on those skills.
+4. **Keyword Extraction**: Identify the 3 most unique key skills in the profile and create at least two queries centered specifically on those skills.
 5. **Seniority Mapping**: If the profile indicates 5+ years of experience, include terms like 'Senior', 'Lead', or 'Principal' in 50% of the queries.
 
 ### OUTPUT FORMAT
@@ -44,7 +44,7 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     """Creates the node of the agent for workflows"""
     pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
 
-    embeddings = get_embeddings(pipeline_settings.api_settings)
+    embeddings = get_embeddings()
     user_store = get_user_analysis_store(embeddings)
     global_store = get_global_jobs_store(embeddings)
 
@@ -71,9 +71,10 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     log_message(f"Researching for roles in {search_location}...")
     prompt_content = (
         f"USER PRIORITIES:\n"
-        f"- Tech Importance: {weights.tech_stack}/100\n"
+        f"- Skill Importance: {weights.key_skills}/100\n"
         f"- Experience Importance: {weights.experience}/100\n"
-        f"- Seniority Importance: {weights.seniority_weight}/100\n\n"
+        f"- Seniority Importance: {weights.seniority_weight}/100\n"
+        f"- Retention Risk: {weights.retention_risk}\n\n"
         f"TASK: Create API query strings for target role {target_roles} "
         f"based on this profile: {profile.model_dump_json()}."
     )
@@ -86,7 +87,7 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     all_queries = response["structured_response"]
     clean_pool = list(set(sanitize_query(q) for q in all_queries.queries))
     final_queries = filter_redundant_queries(clean_pool)
-    jobs = await batch_scrape_jobs(final_queries, search_location)
+    jobs = await batch_scrape_jobs(final_queries, search_location, pipeline_settings)
     jobs = sync_with_global_library(global_store, jobs, 7)
     log_message(f"Research complete! Found a total of {len(jobs)} jobs")
     return {"messages": new_message, "research_data": jobs}

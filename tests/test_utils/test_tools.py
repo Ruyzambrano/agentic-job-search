@@ -8,7 +8,7 @@ from src.utils.tools import (
     sanitize_query,
     filter_redundant_queries,
 )
-from src.schema import RawJobMatch, ListRawJobMatch
+from src.schema import RawJobMatch, ListRawJobMatch, PipelineSettings
 
 
 # --- Tests for extract_best_url ---
@@ -34,8 +34,6 @@ def test_extract_best_url_fallback():
 def test_extract_best_url_none():
     assert extract_best_url(None) == "Not specified"
 
-
-# --- Tests for format_results ---
 
 
 def test_format_results_valid_job():
@@ -63,8 +61,7 @@ async def test_batch_scrape_jobs_success():
         return_value=httpx.Response(200, json=mock_data)
     )
 
-    # Change .invoke to .ainvoke
-    result = await batch_scrape_jobs(["Python"], "London", 40)
+    result = await batch_scrape_jobs(["Python"], "London", PipelineSettings())
 
     assert isinstance(result, ListRawJobMatch)
     assert len(result.jobs) > 0
@@ -77,7 +74,7 @@ async def test_batch_scrape_jobs_empty_results():
         return_value=httpx.Response(200, json={"jobs_results": []})
     )
 
-    result = await batch_scrape_jobs(["NicheRoleThatDoesntExist"], "Mars")
+    result = await batch_scrape_jobs(["NicheRoleThatDoesntExist"], "Mars", PipelineSettings())
 
     assert len(result.jobs) == 0
 

@@ -38,7 +38,6 @@ from src.utils.model_functions import (
     get_gemini_text_models,
     get_model_index,
     get_all_gemini_models,
-    get_gemini_embedding_model_options,
 )
 from src.utils.embeddings_handler import validate_and_get_models
 from src.utils.streamlit_cache import get_job_analysis, get_cv_text
@@ -125,8 +124,8 @@ def display_job_match(job: AnalysedJobMatch):
 
         st.write(job.job_summary)
 
-        if hasattr(job, "tech_stack") and job.tech_stack:
-            chips = " | ".join([f":grey[{tech}]" for tech in job.tech_stack[:5]])
+        if hasattr(job, "key_skills") and job.key_skills:
+            chips = " | ".join([f":grey[{tech}]" for tech in job.key_skills[:5]])
             st.markdown(f"**Tech:** {chips}")
 
         if st.button(
@@ -225,9 +224,9 @@ def jobs_filter_sidebar(jobs: list):
 
         all_tech = set()
         for job in jobs:
-            tech_data = get_job_val(job, ["tech_stack", "qualifications"], [])
-            if isinstance(tech_data, list):
-                all_tech.update(tech_data)
+            skill_data = get_job_val(job, ["key_skills", "qualifications"], [])
+            if isinstance(skill_data, list):
+                all_tech.update(skill_data)
         selected_tech = st.multiselect("Tech Stack", options=sorted(list(all_tech)))
 
         filtered_jobs = jobs
@@ -271,7 +270,7 @@ def jobs_filter_sidebar(jobs: list):
                 j
                 for j in filtered_jobs
                 if all(
-                    t in get_job_val(j, ["tech_stack", "qualifications"], [])
+                    t in get_job_val(j, ["key_skills", "qualifications"], [])
                     for t in selected_tech
                 )
             ]
@@ -324,7 +323,7 @@ def display_full_job(
         badge_html = "".join(
             [
                 f'<span style="background-color:#e1e4e8; color:#0366d6; padding:4px 12px; margin:4px; border-radius:12px; font-weight:bold; display:inline-block;">{tech}</span>'
-                for tech in current_job.tech_stack
+                for tech in current_job.key_skills
             ]
         )
         st.markdown(badge_html, unsafe_allow_html=True)
@@ -459,11 +458,11 @@ def scoring_weights_setting_tab(storage: LocalStorage):
     new_weights_map = {}
     col1, col2 = st.columns(2)
     with col1:
-        new_weights_map["tech_stack"] = st.select_slider(
-            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.tech_stack)}])",
+        new_weights_map["key_skills"] = st.select_slider(
+            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.key_skills)}])",
             options=reversed_weight_map,
             format_func=reversed_weight_map.get,
-            value=weights.tech_stack,
+            value=weights.key_skills,
         )
 
         new_weights_map["experience"] = st.select_slider(
@@ -676,9 +675,8 @@ def set_models_for_pipeline(new_provider: str) -> dict:
         free_tier = st.toggle("Show only free tier models", value=False)
         all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
         text_models = get_gemini_text_models(all_models, free_tier)
-        embedding_models = get_gemini_embedding_model_options(all_models)
         return get_models_for_pipelines(
-            text_models, embedding_models, new_provider.lower()
+            text_models, new_provider.lower()
         )
     # TODO: Implement openai and anthropic
     # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
@@ -691,13 +689,12 @@ def get_model_cache(api_key: str, free_tier: bool = False):
 
 
 def get_models_for_pipelines(
-    text_models: list[dict], embedding_models: list[dict], new_provider: str
+    text_models: list[dict], new_provider: str
 ):
     api = st.session_state.pipeline_settings.api_settings
     current_reader = getattr(api, f"{new_provider}_reader")
     current_writer = getattr(api, f"{new_provider}_writer")
     current_researcher = getattr(api, f"{new_provider}_researcher")
-    current_embedding = getattr(api, f"{new_provider}_embedding")
     if st.toggle("Use different models for the agents?", value=True):
         reader, researcher, writer = st.columns(3)
         with reader:
@@ -734,29 +731,14 @@ def get_models_for_pipelines(
         )
         researcher_model = reader_model
         writer_model = researcher_model
-    with reader:
-        embedding_model = st.selectbox(
-            "Select a Model",
-            options=embedding_models,
-            format_func=lambda x: x.get("label").title().replace("-", " "),
-            key=f"select_{new_provider}_embedding",
-            index=get_model_index(embedding_models, current_embedding),
-        )
+    
     return {
         "reader": reader_model.get("id"),
         "writer": writer_model.get("id"),
         "researcher": researcher_model.get("id"),
-        "embedding": embedding_model.get("id"),
     }
 
 
-def get_model_options(models):
-    return st.selectbox(
-        "Select a CV Parser",
-        options=models,
-        format_func=lambda model: model.title().replace("-", " "),
-        key=f"select_{key_string}",
-    )
 
 
 @st.dialog("New CV")
@@ -800,9 +782,11 @@ def init_app():
     hydrate_keys(storage)
     hydrate_settings(
         "weights",
-        ["tech_stack", "seniority_weight", "experience", "retention_risk"],
+        ["key_skills", "seniority_weight", "experience", "retention_risk"],
         storage,
     )
     hydrate_settings(
         "scraper_settings", ["region", "max_results", "distance_param"], storage
     )
+    if "last_updated" not in st.session_state:
+        st.session_state.last_updated = 0.0

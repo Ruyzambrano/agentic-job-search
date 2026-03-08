@@ -88,9 +88,9 @@ def save_findings_to_docx(state: AgentState) -> str:
             doc.add_paragraph(job.top_applicant_reasoning)
 
             doc.add_heading("Tech Stack to Highlight:", level=2)
-            if job.tech_stack:
-                for tech in job.tech_stack:
-                    doc.add_paragraph(tech, style="List Bullet")
+            if job.key_skills:
+                for skill in job.key_skills:
+                    doc.add_paragraph(skill, style="List Bullet")
             else:
                 doc.add_paragraph("No specific tech stack highlighted.")
 

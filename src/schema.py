@@ -27,7 +27,7 @@ class RawJobMatch(BaseModel):
     is_contract: bool = False
 
     qualifications: List[str] = Field(
-        default_factory=list, description="Extracted tech stack/skills"
+        default_factory=list, description="Extracted skills"
     )
     description: str = Field(description="Summarized job text")
     posted_at: str = Field(default="", description="Date string from listing")
@@ -62,8 +62,9 @@ class AnalysedJobMatch(BaseModel):
     attributes: List[str] = Field(
         description="A list of key attributes of the role, like 'full-time', 'hybrid', 'permanent'"
     )
-    tech_stack: List[str] = Field(
-        description="The key technologies that the job requires"
+    key_skills: Optional[List[str]] = Field(
+        description="The key skills that the job requires, e.g., tech stack",
+        default=[""]
     )
     salary_min: Optional[int] = Field(
         description="The minimum salary range by yearly salary", default=None
@@ -128,7 +129,7 @@ class CandidateProfile(BaseModel):
 
 
 class AgentWeights(BaseModel):
-    tech_stack: int = Field(default=75)
+    key_skills: int = Field(default=75)
     experience: int = Field(default=50)
     location: int = Field(default=25)
     seniority_weight: int = Field(default=75)

@@ -4,27 +4,10 @@ from src.utils.model_functions import get_gemini_embedding_model, get_llm_model
 from src.utils.func import validate_configuration
 
 
-def get_embeddings(api_settings):
-    provider = api_settings.ai_provider
-    validate_configuration(provider, "AI Provider not configured.")
+@st.cache_resource
+def get_embeddings():
+    return get_gemini_embedding_model(st.secrets.EMBEDDING_MODEL, st.secrets.GEMINI_API_KEY)
 
-    model_key = f"{provider}_embedding".lower()
-    model_id = getattr(api_settings, model_key, None)
-    validate_configuration(model_id, "Embedding Model not configured.")
-
-    key_string = f"{provider}_api_key".lower()
-    api_key = getattr(api_settings, key_string, None)
-    validate_configuration(api_key, "API Key not configured.")
-    return get_embedding_model(provider, model_id, api_key)
-
-
-def get_embedding_model(provider, model_id, api_key):
-    if provider == "Gemini":
-        return get_gemini_embedding_model(model_id, api_key)
-    if provider == "OpenAI":
-        raise NotImplementedError("TODO")
-    if provider == "Anthropic":
-        raise NotImplementedError("TODO")
 
 
 def setup_models(api_settings):

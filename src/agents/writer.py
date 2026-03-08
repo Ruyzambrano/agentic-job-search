@@ -24,12 +24,6 @@ from src.utils.embeddings_handler import get_embeddings
 def create_writer_agent(writer_llm):
     """Creates a writer agent"""
 
-    # risk_clause = (
-    #     "STRICTLY DETECT OVER-QUALIFICATION: If a candidate has 10 years of experience "
-    #     "and the job is 'Junior,' the score should be LOW due to 'Retention Risk'."
-    #     if settings.get("retention_risk") else
-    #     "IGNORE seniority over-qualification; focus only on technical competency."
-    # )
     system_prompt = """You are a Critical Recruitment Auditor. Your task is to perform a high-fidelity "Gap Analysis" between a Candidate Profile and a list of job openings.
 
 ### YOUR MANDATE
@@ -67,7 +61,7 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
     log_message("Analysing jobs against your profile...")
     pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
 
-    embeddings = get_embeddings(pipeline_settings.api_settings)
+    embeddings = get_embeddings()
     user_store = get_user_analysis_store(embeddings)
 
     user_id = config.get("configurable", {}).get("user_id")
