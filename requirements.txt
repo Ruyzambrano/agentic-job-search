@@ -22,3 +22,8 @@ streamlit-tags
 pytest-asyncio
 respx
 rapidfuzz
+streamlit-local-storage
+google-genai
+langchain-openai
+langchain-anthropic
+langchain-pinecone

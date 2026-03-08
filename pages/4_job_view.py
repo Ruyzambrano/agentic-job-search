@@ -1,26 +1,54 @@
+from time import time
+
 import streamlit as st
 from src.utils.streamlit_utils import (
     get_raw_job_data,
     display_full_job,
     find_all_candidate_profiles,
+    render_sidebar_feed,
+    init_app,
+)
+from src.utils.streamlit_cache import (
     cached_jobs_all_user_profiles,
     get_cached_user_store,
     get_cached_global_store,
-    render_sidebar_feed,
-)
-
+    )
+from src.utils.embeddings_handler import get_embeddings
 
 def show_specific_job():
-    store = get_cached_user_store()
-    global_job_store = get_cached_global_store()
+    init_app()
+    
+    if "last_updated" not in st.session_state:
+        st.session_state.last_updated = time()
+
+    embeddings = get_embeddings()
+    store = get_cached_user_store(embeddings)
+    global_job_store = get_cached_global_store(embeddings)
 
     subheader = st.sidebar.empty()
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )
 
-    jobs = cached_jobs_all_user_profiles(store, st.user.sub)
-    profile = find_all_candidate_profiles(store, st.user.sub)[0]
+    jobs = cached_jobs_all_user_profiles(
+        store, 
+        st.user.sub, 
+        st.session_state.last_updated
+    )
+
+
+    profiles = find_all_candidate_profiles(
+        store, 
+        st.user.sub, 
+        # last_updated=st.session_state.last_updated
+    )
+    
+    if not profiles:
+        st.warning("Please upload a CV on the Home page first.")
+        st.stop()
+        
+    profile = profiles[0]
+
     render_sidebar_feed(jobs, subheader, sort_by)
 
     if st.session_state.get("current_job"):

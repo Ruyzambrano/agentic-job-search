@@ -9,28 +9,16 @@ from src.agents.researcher import create_researcher_agent
 from src.agents.writer import create_writer_agent
 from src.graph import create_workflow
 from src.utils.document_handler import ingest_input_folder, save_findings_to_docx
-from src.utils.func import pretty_print_jobs_with_rich, log_message, get_llm_model
+from src.utils.func import pretty_print_jobs_with_rich, log_message
 from src.state import AgentState
 
 
-async def run_job_matcher(raw_context, config: dict) -> AgentState:
+async def run_job_matcher(raw_context, config: dict, models: dict) -> AgentState:
     load_dotenv()
     basicConfig(level="INFO")
-    cv_parser_agent = create_cv_parser_agent(
-        get_llm_model(
-            model_type="CV_PARSE"
-        )
-    )
-    researcher_agent = create_researcher_agent(
-        get_llm_model(
-            model_type="SEARCH"
-        )
-    )
-    writer_agent = create_writer_agent(
-        get_llm_model(
-            model_type="WRITER"
-        )
-    )
+    cv_parser_agent = create_cv_parser_agent(models["reader"])
+    researcher_agent = create_researcher_agent(models["researcher"])
+    writer_agent = create_writer_agent(models["writer"])
 
     app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
 

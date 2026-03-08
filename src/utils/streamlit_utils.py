@@ -1,40 +1,50 @@
-from datetime import datetime
-from os import remove
-import tempfile
-import asyncio
-import re
-from io import BytesIO
-
-from markitdown import MarkItDown
 import streamlit as st
 from streamlit_tags import st_tags
+from streamlit_local_storage import LocalStorage
 
 
-from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
-from main import run_job_matcher
+from src.schema import (
+    AnalysedJobMatch,
+    AnalysedJobMatchWithMeta,
+    RawJobMatch,
+    PipelineSettings,
+    AgentWeights,
+)
 from src.utils.vector_handler import (
     find_all_candidate_profiles,
-    get_global_jobs_store,
-    get_user_analysis_store,
-    find_all_roles_for_profile,
-    find_all_roles_for_user,
     fetch_raw_job_data,
     delete_profile,
 )
-from src.utils.document_handler import save_findings_to_docx
+from src.utils.local_storage import (
+    get_browser_key,
+    set_new_key,
+    save_provider_config,
+    get_local_storage,
+)
+from src.utils.func import (
+    format_salary_as_range,
+    iso_formatter,
+    normalize,
+    get_job_val,
+    filter_jobs_by_keywords,
+    get_weight_map,
+    sort_analysed_job_matches_with_meta,
+    sort_raw_job_matches_with_meta,
+    extract_base_locations,
+    get_provider_config,
+    get_model_roles,
+)
+from src.utils.model_functions import (
+    get_gemini_text_models,
+    get_model_index,
+    get_all_gemini_models,
+)
+from src.utils.embeddings_handler import validate_and_get_models
+from src.utils.streamlit_cache import get_job_analysis, get_cv_text
 
 
 def login_screen():
     st.button("Log in with Google", on_click=st.login)
-
-
-def iso_formatter(option: datetime):
-    """Makes an ISO string human readable"""
-    try:
-        dt = datetime.fromisoformat(option)
-        return dt.strftime("%d %b %H:%M")
-    except:
-        return option
 
 
 def display_profile(profile: dict):
@@ -51,19 +61,6 @@ def display_profile(profile: dict):
     with col3:
         with st.expander(label="## Industries", expanded=False):
             st.write(f"- {"\n- ".join(profile.get("industries"))}")
-
-
-def upload_file(file):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.name}") as tmp_file:
-        tmp_file.write(file.getvalue())
-        tmp_path = tmp_file.name
-    md = MarkItDown()
-    result = md.convert(tmp_path)
-    file_text = result.text_content
-
-    remove(tmp_path)
-
-    return file_text
 
 
 def sidebar_handler():
@@ -127,8 +124,8 @@ def display_job_match(job: AnalysedJobMatch):
 
         st.write(job.job_summary)
 
-        if hasattr(job, "tech_stack") and job.tech_stack:
-            chips = " | ".join([f":grey[{tech}]" for tech in job.tech_stack[:5]])
+        if hasattr(job, "key_skills") and job.key_skills:
+            chips = " | ".join([f":grey[{tech}]" for tech in job.key_skills[:5]])
             st.markdown(f"**Tech:** {chips}")
 
         if st.button(
@@ -141,16 +138,6 @@ def display_job_match(job: AnalysedJobMatch):
         st.link_button("Apply for this role", url=job.job_url, use_container_width=True)
 
 
-def format_salary_as_range(salary_min: int, salary_max: int):
-    if salary_min and salary_max:
-        return f"£{salary_min:,} - £{salary_max:,}"
-    if salary_max:
-        return f"£{salary_max:,}"
-    if salary_min:
-        return f"{salary_min:,}"
-    return "Salary not specified"
-
-
 def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
     """Pure logic function: No buttons, just execution."""
     config = {
@@ -158,10 +145,11 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
             "user_id": st.user.sub if st.user else "local-user",
             "location": desired_location,
             "role": desired_role,
+            "pipeline_settings": st.session_state.pipeline_settings,
         }
     }
-    return get_job_analysis(raw_cv_text, config)
-        
+    models = validate_and_get_models()
+    return get_job_analysis(raw_cv_text, config, models)
 
 
 def search_for_new_jobs(active_profile_meta: dict, user_id):
@@ -173,62 +161,12 @@ def search_for_new_jobs(active_profile_meta: dict, user_id):
             "active_profile_id": selected_profile_id,
             "location": st.session_state.get("desired_location", ""),
             "role": st.session_state.get("desired_role", ""),
+            "pipeline_settings": st.session_state.pipeline_settings,
         }
     }
+    models = validate_and_get_models()
     with st.status("Searching for jobs using existing profile..."):
-        return asyncio.run(run_job_matcher("", config))
-
-
-@st.cache_data(show_spinner=False)
-def get_job_analysis(cv_text, config):
-    return asyncio.run(run_job_matcher(cv_text, config))
-
-
-@st.cache_data(show_spinner=False)
-def generate_docx(state):
-    return save_findings_to_docx(state)
-
-
-st.cache_data(show_spinner=False)
-
-
-def get_cv_text(uploaded_file):
-    return upload_file(uploaded_file)
-
-
-@st.cache_resource
-def get_cached_user_store():
-    return get_user_analysis_store()
-
-
-@st.cache_resource
-def get_cached_global_store():
-    return get_global_jobs_store()
-
-
-@st.cache_data(show_spinner="Fetching matched jobs...")
-def get_cached_jobs_for_profile(_store, profile_id):
-    return find_all_roles_for_profile(_store, profile_id)
-
-
-@st.cache_data()
-def cached_jobs_all_user_profiles(_store, user_id):
-    return find_all_roles_for_user(_store, user_id)
-
-
-def normalize(text: str) -> str:
-    if not text:
-        return ""
-    return str(text).title().replace("-", " ").replace("–", " ").strip()
-
-
-def get_job_val(job, fields: list[str], default=None):
-    """Helper to try multiple field names on a Pydantic object."""
-    for field in fields:
-        val = getattr(job, field, None)
-        if val is not None:
-            return val
-    return default
+        return get_job_analysis("", config, models)
 
 
 def jobs_filter_sidebar(jobs: list):
@@ -286,9 +224,9 @@ def jobs_filter_sidebar(jobs: list):
 
         all_tech = set()
         for job in jobs:
-            tech_data = get_job_val(job, ["tech_stack", "qualifications"], [])
-            if isinstance(tech_data, list):
-                all_tech.update(tech_data)
+            skill_data = get_job_val(job, ["key_skills", "qualifications"], [])
+            if isinstance(skill_data, list):
+                all_tech.update(skill_data)
         selected_tech = st.multiselect("Tech Stack", options=sorted(list(all_tech)))
 
         filtered_jobs = jobs
@@ -332,7 +270,7 @@ def jobs_filter_sidebar(jobs: list):
                 j
                 for j in filtered_jobs
                 if all(
-                    t in get_job_val(j, ["tech_stack", "qualifications"], [])
+                    t in get_job_val(j, ["key_skills", "qualifications"], [])
                     for t in selected_tech
                 )
             ]
@@ -343,14 +281,6 @@ def jobs_filter_sidebar(jobs: list):
             if (j.salary_max or 0) >= min_choice and (j.salary_min or 0) <= max_choice
         ]
         return filtered_jobs
-
-
-def get_colour_map(score: int) -> str:
-    if score > 85:
-        return "green"
-    if score > 70:
-        return "orange"
-    return "red"
 
 
 @st.cache_data
@@ -390,11 +320,10 @@ def display_full_job(
         st.write(current_job.top_applicant_reasoning)
 
         st.markdown("### 🛠 Tech Stack")
-        # Visualizing tech stack as badges
         badge_html = "".join(
             [
                 f'<span style="background-color:#e1e4e8; color:#0366d6; padding:4px 12px; margin:4px; border-radius:12px; font-weight:bold; display:inline-block;">{tech}</span>'
-                for tech in current_job.tech_stack
+                for tech in current_job.key_skills
             ]
         )
         st.markdown(badge_html, unsafe_allow_html=True)
@@ -417,31 +346,6 @@ def display_full_job(
                 st.write(f"✅ {q}")
 
         st.caption(f"Posted: {full_job.posted_at}")
-
-
-def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
-    if not keywords:
-        return jobs
-
-    filtered = []
-    lower_keywords = [kw.lower().strip() for kw in keywords if kw.strip()]
-
-    for job in jobs:
-        searchable_text = " ".join(
-            [
-                str(getattr(job, "title", "")),
-                str(getattr(job, "company", "")),
-                str(getattr(job, "job_summary", "")),
-                str(getattr(job, "location", "")),
-                " ".join(getattr(job, "tech_stack", []) or []),
-                " ".join(getattr(job, "attributes", []) or []),
-            ]
-        ).lower()
-
-        if any(kw in searchable_text for kw in lower_keywords):
-            filtered.append(job)
-
-    return filtered
 
 
 def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by: str):
@@ -545,124 +449,344 @@ def matches_setting_or_schedule(job: RawJobMatch, attribute: str) -> bool:
     return job.schedule_type == attribute or job.work_setting
 
 
-def extract_base_locations(location_str: str) -> list[str]:
-    """
-    Splits 'London / Hybrid / Telford' into ['London', 'Telford']
-    and removes parentheticals like '(Remote)'.
-    """
-    if not location_str:
-        return []
+def scoring_weights_setting_tab(storage: LocalStorage):
+    st.subheader("Match Scoring Weights")
+    st.caption("Influence how the Critical Recruitment Auditor ranks candidates.")
+    weight_map = get_weight_map()
+    reversed_weight_map = {v: k for k, v in weight_map.items()}
+    weights = st.session_state.pipeline_settings.weights
+    new_weights_map = {}
+    col1, col2 = st.columns(2)
+    with col1:
+        new_weights_map["key_skills"] = st.select_slider(
+            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.key_skills)}])",
+            options=reversed_weight_map,
+            format_func=reversed_weight_map.get,
+            value=weights.key_skills,
+        )
 
-    # 1. Normalize delimiters: change slashes and commas to pipes for easy splitting
-    # "London / Hybrid" -> "London | Hybrid"
-    normalized = location_str.replace("/", "|").replace(",", "|")
+        new_weights_map["experience"] = st.select_slider(
+            f"Experience Importance (:blue[Currently {reversed_weight_map.get(weights.experience)}])",
+            options=reversed_weight_map,
+            format_func=reversed_weight_map.get,
+            value=weights.experience,
+        )
 
-    # 2. Split into parts
-    parts = [p.strip() for p in normalized.split("|")]
+    with col2:
+        new_weights_map["seniority_weight"] = st.select_slider(
+            f"Seniority Alignment (:blue[Currently {reversed_weight_map.get(weights.seniority_weight)}])",
+            options=reversed_weight_map,
+            format_func=reversed_weight_map.get,
+            value=weights.seniority_weight,
+        )
 
-    clean_cities = []
-    for p in parts:
-        # 3. Use regex to strip anything inside () or []
-        # "London (Flexible" -> "London "
-        # "Remote)" -> "Remote"
-        p_clean = re.sub(r"[\(\[].*?[\)\]]", "", p)  # Removes content inside brackets
-        p_clean = (
-            p_clean.replace("(", "").replace(")", "").strip()
-        )  # Catches stray brackets
+        new_weights_map["retention_risk"] = st.toggle(
+            "Enable Retention Risk", value=weights.retention_risk
+        )
+    save_settings(new_weights_map, "weights", storage)
 
-        # 4. Standardize 'Remote' or 'Hybrid' keywords
-        if "remote" in p_clean.lower():
-            clean_cities.append("Remote")
-        elif "hybrid" in p_clean.lower():
-            clean_cities.append("Hybrid")
-        elif "flexible" in p_clean.lower():
-            clean_cities.append("Flexible")
-        elif len(p_clean) > 2:
-            clean_cities.append(p_clean.title())
 
-    return sorted(list(set(clean_cities)))
+def scraping_settings_tab(storage: LocalStorage):
+    st.subheader("SerpAPI Configuration")
+    current_params = st.session_state.pipeline_settings.scraper_settings
+    new_params = {}
+    new_params["distance_param"] = st.number_input(
+        "Search Distance (km)", value=current_params.distance_param, step=5
+    )
+    regions = ["uk", "us"]
+    idx_region = regions.index(current_params.region)
+    new_params["region"] = st.selectbox(
+        "Search Region",
+        options=regions,
+        index=idx_region,
+        format_func=lambda x: x.upper(),
+    )
+    save_settings(new_params, "scraper_settings", storage)
+
+
+def vector_storage_setting_tab(storage: LocalStorage):
+    """TODO: Implement GDPR stuff"""
+    st.subheader("Vector Store Management")
+    st.warning("Pruning the database is permanent. Use with caution.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Global Raw Jobs", "1,240", delta="+12 today")
+        if st.button("Clean Expired Jobs", use_container_width=True):
+            st.toast("Checking for expired listings...")
+
+    with col2:
+        st.metric(
+            "Active User Profiles", f"{len(st.session_state.get('profiles', []))}"
+        )
+        if st.button("Clear Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.success("App cache cleared.")
 
 
 def render_settings_page():
+    storage = get_local_storage()
     st.title("⚙️ Pipeline Settings")
-
-    tab1, tab2, tab3 = st.tabs(["Agent Logic", "Data Ingestion", "API & Integrations"])
+    st.markdown("Configure the behavior of the AI agents and data processing pipeline.")
+    show_success_toast()
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["🧠 Agent Logic", "📡 Scraping", "💾 Database", "🔑 Integrations"]
+    )
 
     with tab1:
-        st.subheader("Match Scoring Weights")
-        st.info("Adjust how the AI ranks candidates against job descriptions.")
-        col1, col2 = st.columns(2)
-        with col1:
-            tech_weight = st.slider("Tech Stack Importance", 0, 100, 70)
-            exp_weight = st.slider("Experience Importance", 0, 100, 50)
-        with col2:
-            loc_weight = st.slider("Location Importance", 0, 100, 30)
-            culture_weight = st.slider("Soft Skills Importance", 0, 100, 20)
+        scoring_weights_setting_tab(storage)
 
     with tab2:
-        st.subheader("Scraper Configuration")
-        st.selectbox(
-            "Sync Frequency", ["Real-time", "Every 6 Hours", "Daily", "Weekly"]
-        )
-        st.toggle("Auto-archive expired listings", value=True)
-        if st.button("Force Global Re-index", type="primary"):
-            st.warning("This will re-run analysis on all raw jobs. Proceed?")
+        scraping_settings_tab(storage)
 
     with tab3:
-        st.subheader("Secrets & Connections")
-        st.text_input("GEmini API Key", type="password")
-        st.text_input(
-            "Slack Webhook URL", placeholder="https://hooks.slack.com/services/..."
+        vector_storage_setting_tab(storage)
+
+    with tab4:
+        render_api_settings(storage)
+
+    st.markdown("---")
+
+
+def save_settings(new_data: dict, setting_type: str, storage: LocalStorage):
+    col_save, col_reset, _ = st.columns([1, 1, 2])
+    with col_save:
+        if st.button(
+            "Save Settings", type="primary", key=f"save_{setting_type}", width="stretch"
+        ):
+            changes_made = [
+                set_new_key(key, value, storage, setting_type)
+                for key, value in new_data.items()
+            ]
+            if any(changes_made):
+                st.session_state.updated_setting = True
+                st.rerun()
+
+    with col_reset:
+        if st.button("Reset to Default", width="stretch", key=f"reset_{setting_type}"):
+            reset_setting_to_default_values(setting_type, storage)
+            st.session_state.reset_settings = True
+            st.rerun()
+
+
+def show_success_toast():
+    if st.session_state.get("changed_api_key"):
+        st.toast("Changed AI API Key", icon=":material/api:")
+        st.session_state.changed_api_key = False
+    if st.session_state.get("changed_provider"):
+        st.toast("Changed AI Provider", icon=":material/smart_toy:")
+        st.session_state.changed_provider = False
+    if st.session_state.get("changed_serpapi"):
+        st.toast("Changed SerpAPI API Key", icon=":material/work_alert:")
+        st.session_state.changed_serpapi = False
+    if st.session_state.get("updated_models"):
+        st.toast("Updated Model Configuration", icon=":material/model_training:")
+        st.session_state.updated_models = False
+    if st.session_state.get("updated_setting"):
+        st.toast("Settings Updated", icon=":material/exercise:")
+        st.session_state.updated_setting = False
+
+    if st.session_state.get("reset_settings"):
+        st.toast("Settings Reset", icon=":material/refresh:")
+        st.session_state.reset_settings = False
+
+
+def hydrate_keys(storage: LocalStorage):
+    st.session_state.provider_config = get_provider_config()
+    st.session_state.model_roles = get_model_roles()
+
+    new_data_found = False
+
+    keys_to_fetch = ["serpapi_key", "ai_provider"]
+    for provider, item in st.session_state.provider_config.items():
+        keys_to_fetch.append(item.get("key"))
+        for role in st.session_state.model_roles:
+            keys_to_fetch.append(f"{provider.lower()}_{role}")
+
+    for k in keys_to_fetch:
+        old_val = getattr(st.session_state.pipeline_settings.api_settings, k, None)
+        new_val = get_browser_key(k, storage, "api_settings")
+
+        if new_val and new_val != old_val:
+            new_data_found = True
+
+    if new_data_found:
+        st.rerun()
+
+
+def hydrate_settings(setting_type: str, keys: list[str], storage: LocalStorage):
+    for key in keys:
+        get_browser_key(key, storage, setting_type)
+
+
+@st.fragment
+def render_api_settings(storage: LocalStorage):
+    st.subheader("Secrets & API Keys")
+    api = st.session_state.pipeline_settings.api_settings
+
+    all_providers = list(st.session_state.provider_config.keys())
+    idx = (
+        all_providers.index(api.ai_provider) if api.ai_provider in all_providers else 0
+    )
+    new_provider = st.selectbox("AI Provider", all_providers, index=idx)
+    config = st.session_state.provider_config[new_provider]
+    new_api_key = st.text_input(
+        f"{new_provider} API Key",
+        type="password",
+        value=getattr(api, config["key"]),
+        help=f"Get your key from {config['url']}",
+    ).strip()
+
+    new_serpapi_key = st.text_input(
+        "SerpAPI Key",
+        type="password",
+        value=api.serpapi_key,
+        help="Used for live job searching",
+    ).strip()
+
+    # TODO: Slack integrations
+    # st.text_input("Slack Webhook", placeholder="https://hooks.slack.com/services/...", help="Optional: Send job alerts to Slack.")
+
+    if st.button("Save Keys to Browser", key="set_keys"):
+        st.session_state.changed_api_key = set_new_key(
+            config["key"], new_api_key, storage, "api_settings"
+        )
+        st.session_state.changed_provider = set_new_key(
+            "ai_provider", new_provider, storage, "api_settings"
+        )
+        st.session_state.changed_serpapi = set_new_key(
+            "serpapi_key", new_serpapi_key, storage, "api_settings"
         )
 
-    if st.button("Save Configuration"):
-        st.success("Settings updated and applied to Agent Pipeline.")
+    st.write(":red[To see a full list of models, enter your API Key below]")
+    active_key = getattr(api, config["key"])
+    if active_key:
+        st.divider()
+        st.subheader("Select Models")
+        model_map = set_models_for_pipeline(new_provider)
+        if st.button("Save Model Configuration"):
+            save_provider_config(new_provider, model_map, storage)
+            st.session_state.updated_models = True
 
 
-def sort_analysed_job_matches_with_meta(
-    jobs: list[AnalysedJobMatchWithMeta], sort_by
-) -> list[AnalysedJobMatchWithMeta]:
-    sort_map = {
-        "Score": "top_applicant_score",
-        "Analysis Date": "analysed_at",
-        "Company": "company",
-        "Role": "title",
+def set_models_for_pipeline(new_provider: str) -> dict:
+    api_settings = st.session_state.pipeline_settings.api_settings
+    if new_provider == "Gemini" and getattr(api_settings, "gemini_api_key", None):
+        free_tier = st.toggle("Show only free tier models", value=False)
+        all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
+        text_models = get_gemini_text_models(all_models, free_tier)
+        return get_models_for_pipelines(
+            text_models, new_provider.lower()
+        )
+    # TODO: Implement openai and anthropic
+    # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
+    #     st.header("TODO: Get models")
+
+
+@st.cache_data
+def get_model_cache(api_key: str, free_tier: bool = False):
+    return get_all_gemini_models(api_key, free_tier)
+
+
+def get_models_for_pipelines(
+    text_models: list[dict], new_provider: str
+):
+    api = st.session_state.pipeline_settings.api_settings
+    current_reader = getattr(api, f"{new_provider}_reader")
+    current_writer = getattr(api, f"{new_provider}_writer")
+    current_researcher = getattr(api, f"{new_provider}_researcher")
+    if st.toggle("Use different models for the agents?", value=True):
+        reader, researcher, writer = st.columns(3)
+        with reader:
+            reader_model = st.selectbox(
+                "Select a CV Parser",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_reader",
+                index=get_model_index(text_models, current_reader),
+            )
+        with researcher:
+            researcher_model = st.selectbox(
+                "Select a Researcher",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_researcher",
+                index=get_model_index(text_models, current_researcher),
+            )
+        with writer:
+            writer_model = st.selectbox(
+                "Select an Analyser",
+                options=text_models,
+                format_func=lambda x: x.get("label").title().replace("-", " "),
+                key=f"select_{new_provider}_writer",
+                index=get_model_index(text_models, current_writer),
+            )
+    else:
+        reader_model = st.selectbox(
+            "Select an Embedder",
+            options=text_models,
+            format_func=lambda x: x.get("label").title().replace("-", " "),
+            key=f"select_{new_provider}_all_nodes",
+            index=get_model_index(text_models, current_reader),
+        )
+        researcher_model = reader_model
+        writer_model = researcher_model
+    
+    return {
+        "reader": reader_model.get("id"),
+        "writer": writer_model.get("id"),
+        "researcher": researcher_model.get("id"),
     }
 
-    target_attr = sort_map.get(sort_by, sort_by)
-
-    reverse = target_attr in ["top_applicant_score", "analysed_at"]
-    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
-    return jobs
 
 
-def sort_raw_job_matches_with_meta(
-    jobs: list[AnalysedJobMatchWithMeta], sort_by
-) -> list[AnalysedJobMatchWithMeta]:
-    sort_map = {"Posted Date": "posted_at", "Company": "company_name", "Role": "title"}
-
-    target_attr = sort_map.get(sort_by, sort_by)
-
-    reverse = target_attr == "posted_at"
-    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
-    return jobs
 
 @st.dialog("New CV")
 def cv_handler():
     new_cv = st.file_uploader("Upload a new CV (PDF, DOCX)", type=["pdf", "docx"])
-    
+
     if new_cv:
         with st.spinner("Extracting text..."):
             text = get_cv_text(new_cv)
             st.session_state.raw_cv_text = text
-            
+
     if st.session_state.get("raw_cv_text"):
         st.success("CV read successfully!")
         role = st.text_input("Desired Role", value="Data Engineer")
         loc = st.text_input("Desired Location", value="London")
-        
+
         if st.button("Analyze & Find Jobs"):
             st.session_state.start_processing = True
             st.session_state.desired_role = role
             st.session_state.desired_location = loc
             st.rerun()
+
+
+def initialise_pipeline_settings():
+    """Initializes default settings in session state if not already present."""
+    pipeline_settings = st.session_state.get("pipeline_settings")
+    if not pipeline_settings or not isinstance(pipeline_settings, PipelineSettings):
+        st.session_state.pipeline_settings = PipelineSettings()
+
+
+def reset_setting_to_default_values(setting: str, storage: LocalStorage):
+    if setting == "weights":
+        weights = AgentWeights().model_dump()
+        for key, value in weights.items():
+            set_new_key(key, value, storage, setting)
+
+
+def init_app():
+    initialise_pipeline_settings()
+    storage = get_local_storage()
+    hydrate_keys(storage)
+    hydrate_settings(
+        "weights",
+        ["key_skills", "seniority_weight", "experience", "retention_risk"],
+        storage,
+    )
+    hydrate_settings(
+        "scraper_settings", ["region", "max_results", "distance_param"], storage
+    )
+    if "last_updated" not in st.session_state:
+        st.session_state.last_updated = 0.0

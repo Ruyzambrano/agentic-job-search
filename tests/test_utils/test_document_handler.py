@@ -45,7 +45,7 @@ def test_save_findings_to_docx_success():
     mock_job.job_summary = "A great role."
     mock_job.top_applicant_score = 95
     mock_job.top_applicant_reasoning = "Because you are awesome."
-    mock_job.tech_stack = ["Python", "AWS"]
+    mock_job.key_skills = ["Python", "AWS"]
 
     mock_state = {
         "cv_data": MagicMock(full_name="John Doe"),

@@ -2,7 +2,8 @@
 
 import streamlit as st
 
-from src.utils.streamlit_utils import login_screen
+from src.utils.streamlit_utils import login_screen, init_app
+from src.utils.local_storage import get_local_storage
 
 if __name__ == "__main__":
     st.set_page_config(page_title="CV Job Searcher", layout="wide")
@@ -10,7 +11,8 @@ if __name__ == "__main__":
     if not st.user.is_logged_in:
         login_screen()
         st.stop()
-
+    storage = get_local_storage()
+    init_app()
     pages = [
         st.Page(page="pages/1_home.py", title="Home", default=True),
         st.Page(page="pages/3_all_jobs.py", title="Your Jobs"),
