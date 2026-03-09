@@ -1,7 +1,9 @@
-import altair as alt
-import pandas as pd
+import json
+
 import streamlit as st
 
+from src.utils.streamlit_utils import init_app
+from src.utils.streamlit_cache import get_cached_user_store, get_cached_global_store
 from src.utils.altair_handler import (
     MarketAnalytics,
     create_salary_chart,
@@ -10,19 +12,11 @@ from src.utils.altair_handler import (
     create_market_heatmap,
     create_market_tightness_chart,
 )
-from src.utils.vector_handler import get_global_jobs_store, get_user_analysis_store
+from src.utils.embeddings_handler import get_embeddings
 
-
-def main_dashboard():
-    global_store = get_global_jobs_store()
-    user_store = get_user_analysis_store()
-
-    profiles = user_store.get().get("metadatas", {})
-    jobs = global_store.get().get("metadatas", {})
-
+def display_dashboard(profiles, jobs):
     engine = MarketAnalytics(jobs, profiles)
 
-    # --- Sidebar ---
     with st.sidebar:
         st.header("Dashboard Filters")
         settings = st.multiselect(
@@ -76,6 +70,44 @@ def main_dashboard():
     st.altair_chart(create_location_salary_chart(df_j))
     st.altair_chart(create_market_heatmap(df_p))
 
+
+def main_dashboard():
+    init_app()
+
+    embeddings = get_embeddings()
+    user_store = get_cached_user_store(embeddings)
+    global_store = get_cached_global_store(embeddings)
+    
+    user_index = user_store.get_pinecone_index('agent-pipeline')
+    zero_vector = [0.0] * 3072 
+    
+    profile_results = user_index.query(
+        vector=zero_vector,
+        top_k=100,
+        namespace=user_store._namespace,
+        include_metadata=True
+    )
+    profiles = []
+    for m in profile_results.get("matches", []):
+        meta = m["metadata"]
+        for field in ["job_titles", "key_skills", "industries"]:
+            if isinstance(meta.get(field), str):
+                meta[field] = json.loads(meta[field])
+        profiles.append(meta)
+
+    global_index = global_store.get_pinecone_index('agent-pipeline')
+    job_results = global_index.query(
+        vector=zero_vector,
+        top_k=1000,
+        namespace=global_store._namespace,
+        include_metadata=True
+    )
+    jobs = [m["metadata"] for m in job_results.get("matches", [])]
+
+    if jobs and profiles:
+        display_dashboard(profiles, jobs)
+    else:
+        st.info("Gathering more market data... Upload a CV or wait for job syncing.")
 
 if __name__ == "__main__":
 

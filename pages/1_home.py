@@ -1,23 +1,31 @@
 """See your profiles and Jobs"""
+from time import time
+
 import streamlit as st
 
 from src.utils.streamlit_utils import (
     display_profile,
     filter_for_profiles,
     display_job_matches,
-    get_cached_global_store,
-    get_cached_user_store,
-    get_cached_jobs_for_profile,
     search_for_new_jobs,
     delete_profile_dialogue,
     cv_handler,
-    process_new_cv
+    process_new_cv,
+    init_app,
+)
+from src.utils.embeddings_handler import get_embeddings
+from src.utils.streamlit_cache import (
+    get_cached_global_store,
+    get_cached_jobs_for_profile,
+    get_cached_user_store,
 )
 
 
 def main_page():
-    user_vector_store = get_cached_user_store()
-    global_jobs_store = get_cached_global_store()
+    init_app()
+    embedding = get_embeddings()
+    user_vector_store = get_cached_user_store(embedding)
+    global_jobs_store = get_cached_global_store(embedding)
 
     user_id = st.user.sub
 
@@ -29,11 +37,12 @@ def main_page():
             st.write("Analyzing CV...")
             analysis = process_new_cv(
                 st.session_state.raw_cv_text,
-                st.session_state.desired_role, 
-                st.session_state.desired_location
+                st.session_state.desired_role,
+                st.session_state.desired_location,
             )
             st.session_state["job_analysis"] = analysis
             st.session_state.start_processing = False
+            st.session_state.last_updated = time()
             status.update(label="Analysis Complete!", state="complete")
             st.session_state.raw_cv_text = None
         st.rerun()
@@ -62,7 +71,7 @@ def main_page():
             st.session_state["job_analysis"] = search_for_new_jobs(
                 active_profile_meta, user_id
             )
-            get_cached_jobs_for_profile.clear()
+            st.session_state.last_updated = time()
         sorting = st.empty()
 
         st.divider()
@@ -72,13 +81,17 @@ def main_page():
             use_container_width=True,
             type="primary",
         ):
-            delete_profile_dialogue(user_vector_store, active_profile_meta.get("profile_id"))
-            get_cached_jobs_for_profile.clear()
+            delete_profile_dialogue(
+                user_vector_store, active_profile_meta.get("profile_id")
+            )
+            st.session_state.last_updated = time()
 
     display_profile(profile=active_profile_meta)
 
     jobs = get_cached_jobs_for_profile(
-        user_vector_store, active_profile_meta.get("profile_id")
+        user_vector_store, 
+        active_profile_meta.get("profile_id"),
+        st.session_state.last_updated
     )
 
     if jobs:

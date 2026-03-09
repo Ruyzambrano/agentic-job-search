@@ -38,29 +38,34 @@ def test_prepare_for_storage():
     assert meta["title"] == "Engineer"
 
 
-# --- Database Integration Tests (With Mocks) ---
 
-
-@patch("src.utils.vector_handler.get_embeddings")
-def test_save_candidate_profile(mock_embeddings, mock_chroma_store):
-    profile = CandidateProfile(
-        full_name="Ruy Zambrano",
-        summary="AI Dev",
-        job_titles=["Engineer"],
-        key_skills=["Python"],
-        industries=["Tech"],
-        years_of_experience=1000,
-        current_location="Here",
-        work_preference="Never",
+@pytest.mark.asyncio
+@patch("src.utils.vector_handler.get_user_analysis_store")
+@patch("src.utils.embeddings_handler.get_embeddings")
+async def test_save_candidate_profile(mock_embed, mock_store, mock_settings, mock_candidate_profile):
+    mock_embed.return_value = MagicMock()
+    mock_vectorstore = MagicMock()
+    mock_store.return_value = mock_vectorstore
+    
+    result_id = save_candidate_profile(
+        profile=mock_candidate_profile,
+        store=mock_vectorstore,
+        user_id="user_123",
+        config={}
     )
 
-    # We use a mock store created via a fixture (see below)
-    user_id = "user123"
-    profile_id = save_candidate_profile(mock_chroma_store, user_id, profile, {})
-
-    assert "profile_user123_" in profile_id
-    # Verify the store's add_texts was called
-    mock_chroma_store.add_texts.assert_called_once()
+    assert result_id is not None
+    mock_vectorstore.add_texts.assert_called_once()
+    
+    _, kwargs = mock_vectorstore.add_texts.call_args
+    
+    texts = kwargs.get('texts', [])
+    print(texts)
+    assert any("Ruy Zambrano" in t for t in texts)
+    
+    metadatas = kwargs.get('metadatas', [{}])
+    print(metadatas)
+    assert metadatas[0].get("user_id") == "user_123"
 
 
 @patch("src.utils.vector_handler.log_message")

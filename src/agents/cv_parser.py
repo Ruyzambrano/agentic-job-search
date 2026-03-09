@@ -11,6 +11,7 @@ from src.utils.vector_handler import (
     fetch_candidate_profile,
 )
 from src.utils.func import log_message
+from src.utils.embeddings_handler import get_embeddings
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -27,7 +28,7 @@ You are a precise HR Data Extraction Engine. Your sole purpose is to transform r
 ### EXTRACTION GUIDELINES
 1. **Name Extraction**: The name is usually at the very top. If multiple names appear (e.g., references), identify the candidate by looking for the one associated with contact info.
 2. **Title Normalization**: Map messy titles to standard industry terms (e.g., "Full Stack Wizard" -> "Full Stack Developer").
-3. **Skill Prioritization**: Focus on technical "Hard Skills" (Python, AWS, SQL) over "Soft Skills" (Teamwork, Leadership).
+3. **Skill Prioritization**: Focus on technical "Hard Skills" over "Soft Skills".
 4. **Seniority Logic**: 
    - 0-2 years: Junior
    - 3-5 years: Mid
@@ -51,8 +52,10 @@ def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
         raise ValueError(
             "user_id is missing from the configuration. Cannot save profile."
         )
+    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
 
-    user_store = get_user_analysis_store()
+    embeddings = get_embeddings()
+    user_store = get_user_analysis_store(embeddings)
 
     existing_profile_id = config.get("configurable", {}).get("active_profile_id")
 

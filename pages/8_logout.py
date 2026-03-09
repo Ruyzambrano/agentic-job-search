@@ -2,4 +2,5 @@
 
 from streamlit import logout
 
-logout()
+if __name__ == "__main__":
+    logout()

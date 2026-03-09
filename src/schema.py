@@ -27,7 +27,7 @@ class RawJobMatch(BaseModel):
     is_contract: bool = False
 
     qualifications: List[str] = Field(
-        default_factory=list, description="Extracted tech stack/skills"
+        default_factory=list, description="Extracted skills"
     )
     description: str = Field(description="Summarized job text")
     posted_at: str = Field(default="", description="Date string from listing")
@@ -37,13 +37,17 @@ class RawJobMatch(BaseModel):
 class ListRawJobMatch(BaseModel):
     jobs: List[RawJobMatch] = Field("A list of raw job match objects")
 
+
 class SearchQueryPlan(BaseModel):
-    queries: list[str] = Field(description="A list of 5-10 optimized Google Jobs search strings")
+    queries: list[str] = Field(
+        description="A list of 5-10 optimized Google Jobs search strings"
+    )
     reasoning: str = Field(description="Why these specific terms were chosen")
+
+
 class AnalysedJobMatch(BaseModel):
     title: str = Field(description="The title of the job listing")
-    company: str = Field(
-        description="The name of the company")
+    company: str = Field(description="The name of the company")
     job_url: str = Field(description="The URL of the job advert")
     location: str = Field(
         description="The location of the role, as granular as possible"
@@ -59,8 +63,9 @@ class AnalysedJobMatch(BaseModel):
     attributes: List[str] = Field(
         description="A list of key attributes of the role, like 'full-time', 'hybrid', 'permanent'"
     )
-    tech_stack: List[str] = Field(
-        description="The key technologies that the job requires"
+    key_skills: Optional[List[str]] = Field(
+        description="The key skills that the job requires, e.g., tech stack",
+        default=[""]
     )
     salary_min: Optional[int] = Field(
         description="The minimum salary range by yearly salary", default=None
@@ -123,3 +128,44 @@ class CandidateProfile(BaseModel):
         description="Industries they have worked in (e.g., ['Fintech', 'Healthcare'])"
     )
     work_preference: str = Field(description="Remote, Hybrid, or On-site if specified")
+
+
+class AgentWeights(BaseModel):
+    key_skills: int = Field(default=75)
+    experience: int = Field(default=50)
+    location: int = Field(default=25)
+    seniority_weight: int = Field(default=75)
+    retention_risk: bool = Field(default=True)
+
+
+class ScraperSettings(BaseModel):
+    distance_param: int = Field(default=40)
+    region: str = Field(default="uk")
+
+
+class ApiSettings(BaseModel):
+    ai_provider: str = ""
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    serpapi_key: str = ""
+    slack_webhook: str = ""
+    gemini_reader: str = "gemini-2.5-flash-lite"
+    gemini_writer: str = "gemini-3-flash-preview"
+    gemini_researcher: str = "gemini-2.5-flash"
+    gemini_embedding: str = "gemini-embedding-001"
+
+    openai_reader: str = "gpt-4o-mini"
+    openai_writer: str = "gpt-4o"
+    openai_researcher: str = "gpt-5"
+
+    anthropic_api_key: str = ""
+    claude_reader: str = "claude-3-5-haiku"
+    claude_writer: str = "claude-3-5-sonnet"
+    claude_researcher: str = "claude-3-5-sonnet"
+
+
+class PipelineSettings(BaseModel):
+    weights: AgentWeights = Field(default_factory=AgentWeights)
+    scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)
+    api_settings: ApiSettings = Field(default_factory=ApiSettings)
