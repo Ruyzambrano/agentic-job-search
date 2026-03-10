@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from src.utils.vector_handler import (
     is_cache_expired,
     prepare_for_storage,
@@ -14,11 +14,11 @@ from src.schema import RawJobMatch, ListRawJobMatch, CandidateProfile
 
 def test_is_cache_expired():
     # 1. Test not expired
-    recent_date = datetime.now().isoformat()
+    recent_date = datetime.now(timezone.utc).isoformat()
     assert is_cache_expired({"last_synced_at": recent_date}, ttl_days=7) is False
 
     # 2. Test expired
-    old_date = (datetime.now() - timedelta(days=10)).isoformat()
+    old_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
     assert is_cache_expired({"last_synced_at": old_date}, ttl_days=7) is True
 
     # 3. Test missing date
@@ -67,22 +67,23 @@ async def test_save_candidate_profile(mock_embed, mock_store, mock_settings, moc
     print(metadatas)
     assert metadatas[0].get("user_id") == "user_123"
 
-
 @patch("src.utils.vector_handler.log_message")
-def test_sync_with_global_library_new_job(mock_log, mock_chroma_store):
-    mock_chroma_store.get.return_value = {"ids": [], "metadatas": []}
-    mock_chroma_store.add_texts = MagicMock()
+def test_sync_with_global_library_new_job(mock_log, mock_pinecone):
+    store, index, fetch_res = mock_pinecone
+    
+    fetch_res.vectors = {}
 
     job = RawJobMatch(
         title="New Job",
         job_url="unique_url",
         description="desc",
         company_name="C",
-        location="MA",
+        location="MA"
     )
     raw_results = ListRawJobMatch(jobs=[job])
 
-    final_jobs = sync_with_global_library(mock_chroma_store, raw_results)
+    final_jobs = sync_with_global_library(store, raw_results)
 
-    mock_chroma_store.add_texts.assert_called_once()
-    assert final_jobs[0].title == "New Job"
+    assert len(final_jobs) == 1
+    store.add_texts.assert_called_once()
+    mock_log.assert_any_call("🆕 New: New Job")

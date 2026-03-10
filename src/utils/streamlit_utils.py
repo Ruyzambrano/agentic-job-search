@@ -53,13 +53,13 @@ def display_profile(profile: dict):
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        with st.expander(label="## Previous roles", expanded=False):
+        with st.expander(label="Previous roles", expanded=False):
             st.write(f"- {"\n- ".join(profile.get("job_titles"))}")
     with col2:
-        with st.expander(label="## Key Skills", expanded=False):
+        with st.expander(label="Key Skills", expanded=False):
             st.write(f"- {"\n- ".join(profile.get('key_skills'))}")
     with col3:
-        with st.expander(label="## Industries", expanded=False):
+        with st.expander(label="Industries", expanded=False):
             st.write(f"- {"\n- ".join(profile.get("industries"))}")
 
 

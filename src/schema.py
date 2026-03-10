@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
@@ -31,6 +31,7 @@ class RawJobMatch(BaseModel):
     )
     description: str = Field(description="Summarized job text")
     posted_at: str = Field(default="", description="Date string from listing")
+    original_description: Optional[str] = Field(description="The original, unsummarised job description", default="")
 
 
 class ListRawJobMatch(BaseModel):
@@ -78,12 +79,13 @@ class AnalysedJobMatch(BaseModel):
     top_applicant_reasoning: str = Field(
         description="A rationale why the candidate fits the role"
     )
+    original_description: Optional[str] = Field(description="The original job description from the job advert without summary", default="")
 
 
 class AnalysedJobMatchWithMeta(AnalysedJobMatch):
     analysed_at: Optional[str] = Field(
         description="Timestamp of analysis",
-        default_factory=lambda: datetime.now().isoformat(),
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
     )
     target_role: Optional[str] = Field(
         description="The role that the agent was prioritising", default=""

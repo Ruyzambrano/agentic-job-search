@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from json import loads, dumps
 from typing import List
 
@@ -35,7 +35,7 @@ def get_user_analysis_store(embedding_model):
 def save_candidate_profile(
     store, user_id: str, profile: CandidateProfile, config: RunnableConfig
 ):
-    timestamp_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     profile_id = f"profile_{user_id}_{timestamp_id}"
 
     document_content = (
@@ -51,7 +51,7 @@ def save_candidate_profile(
             metadata[key] = dumps(value)
 
     metadata["user_id"] = user_id
-    metadata["created_at"] = datetime.now().isoformat()
+    metadata["created_at"] = datetime.now(timezone.utc).isoformat()
 
     store.add_texts(texts=[document_content], metadatas=[metadata], ids=[profile_id])
     return profile_id
@@ -79,16 +79,27 @@ def fetch_candidate_profile(profile_id: str, user_store: PineconeVectorStore) ->
 def check_analysis_cache(store: PineconeVectorStore, jobs: list[RawJobMatch], profile_id: str):
     """Checks the store for cached data"""
     hits, misses = [], []
-    for job in jobs:
-        cache_id = f"{profile_id}_{job.job_url}"
-        existing = store.get_by_ids(ids=[cache_id])
+    index = store.get_pinecone_index('agent-pipeline')
+    ns = store._namespace
 
-        if existing and existing.get("metadatas"):
-            log_message(f"Cache Hit: {job.title} at {job.company_name}")
-            raw_json = existing["metadatas"][0].get("analysis_json")
-            hits.append(AnalysedJobMatchWithMeta(**loads(raw_json)))
+    cache_map = {f"{profile_id}_{job.job_url}": job for job in jobs}
+    cache_ids = list(cache_map.keys())
+    
+    response = index.fetch(ids=cache_ids, namespace=ns)
+    existing_vectors = response.vectors if response else {}
+
+    for cid, job in cache_map.items():
+        if cid in existing_vectors:
+            log_message(f"✅ Cache Hit: {job.title}")
+            meta = existing_vectors[cid].metadata
+            raw_json = meta.get("analysis_json")
+            if raw_json:
+                hits.append(AnalysedJobMatchWithMeta(**loads(raw_json)))
+            else:
+                misses.append(job)
         else:
             misses.append(job)
+            
     return hits, misses
 
 
@@ -99,13 +110,13 @@ def is_cache_expired(metadata: dict, ttl_days: int) -> bool:
         return True
 
     expiry_date = datetime.fromisoformat(last_synced) + timedelta(days=ttl_days)
-    return datetime.now() > expiry_date
+    return datetime.now(timezone.utc) > expiry_date
 
 
 def prepare_for_storage(job: RawJobMatch) -> dict:
     """Ensures metadata is DB-ready with a fresh timestamp."""
     meta = job.model_dump()
-    meta["last_synced_at"] = datetime.now().isoformat()
+    meta["last_synced_at"] = datetime.now(timezone.utc).isoformat()
     return meta
 
 
@@ -117,41 +128,68 @@ def parse_cached_meta(metadata: dict) -> RawJobMatch:
             metadata[field] = loads(metadata[field])
     return RawJobMatch(**metadata)
 
-
 def sync_with_global_library(
-    global_store: PineconeVectorStore, raw_results: ListRawJobMatch, ttl_days: int = 7
+    global_store: PineconeVectorStore, 
+    raw_results: ListRawJobMatch, 
+    ttl_days: int = 7
 ) -> List[RawJobMatch]:
+    """
+    Syncs a list of jobs with Pinecone. 
+    Uses batching for both reading and writing to minimize network latency.
+    """
     final_jobs = []
-    seen_identifiers = set()
-    log_message(f"Syncing roles with Global Library")
-    for job in raw_results.jobs:
-        unique_key = f"{job.job_url}_{job.title}"
-        if unique_key in seen_identifiers:
-            continue
-        seen_identifiers.add(unique_key)
+    jobs_to_upsert = []
+    
+    log_message(f"🔍 Syncing {len(raw_results.jobs)} roles with Global Library")
+    
+    index = global_store.get_pinecone_index('agent-pipeline')
+    ns = global_store._namespace
 
-        res = global_store.get_by_ids(ids=[job.job_url])
-        existing_meta = res["metadatas"][0] if res.get("ids") else None
+    job_map = {f"{j.job_url}_{j.title}": j for j in raw_results.jobs}
+    unique_ids = list(job_map.keys())
 
+    try:
+        response = index.fetch(ids=unique_ids, namespace=ns)
+        existing_vectors = response.vectors if response and hasattr(response, 'vectors') else {}    
+    except Exception as e:
+        log_message(f"⚠️ Fetch Error: {e}. Proceeding with fresh sync for all.")
+        existing_vectors = {}
+
+    for uid, job in job_map.items():
+        vector_data = existing_vectors.get(uid)
+        existing_meta = vector_data.metadata if vector_data and hasattr(vector_data, 'metadata') else None
         if not existing_meta or is_cache_expired(existing_meta, ttl_days):
-            try:
-                global_store.add_texts(
-                    texts=[job.description],
-                    metadatas=[prepare_for_storage(job)],
-                    ids=[job.job_url],
-                )
-                final_jobs.append(job)
-                status = "✨ Updated" if existing_meta else "🆕 New"
-                log_message(f"{status}: {job.title}")
-            except Exception as e:
-                log_message(f"❌ Storage Error ({job.title}): {e}")
-                final_jobs.append(job)
+            jobs_to_upsert.append({
+                "id": uid,
+                "text": job.description,
+                "metadata": prepare_for_storage(job) 
+            })
+            final_jobs.append(job)
+            
+            status = "✨ Updated" if existing_meta else "🆕 New"
+            log_message(f"{status}: {job.title}")
         else:
             try:
                 final_jobs.append(parse_cached_meta(existing_meta))
                 log_message(f"📦 Cached: {job.title}")
-            except Exception:
+            except Exception as e:
+                log_message(f"⚠️ Parsing error for {job.title}, resyncing: {e}")
+                jobs_to_upsert.append({
+                    "id": uid, "text": job.description, "metadata": prepare_for_storage(job)
+                })
                 final_jobs.append(job)
+
+    if jobs_to_upsert:
+        try:
+            log_message(f"🚀 Batch uploading {len(jobs_to_upsert)} jobs to Pinecone...")
+            global_store.add_texts(
+                texts=[j["text"] for j in jobs_to_upsert],
+                metadatas=[j["metadata"] for j in jobs_to_upsert],
+                ids=[j["id"] for j in jobs_to_upsert]
+            )
+        except Exception as e:
+            log_message(f"❌ Critical Storage Error: {e}")
+
     return final_jobs
 
 
@@ -159,25 +197,27 @@ def save_job_analyses(
     user_store: PineconeVectorStore, jobs: list[AnalysedJobMatchWithMeta], user_id, profile_id
 ):
     """Saves personalized analysis to the vector store."""
-    user_store.add_texts(
-        texts=[a.top_applicant_reasoning for a in jobs],
-        metadatas=[
-            {
-                "user_id": user_id,
-                "profile_id": profile_id,
-                "analysed_at": (
-                    a.analysed_at.isoformat()
-                    if hasattr(a.analysed_at, "isoformat")
-                    else str(a.analysed_at)
-                ),
-                "analysis_json": a.model_dump_json(),
-                "target_role": a.target_role,
-                "target_location": a.target_location,
-            }
-            for a in jobs
-        ],
-        ids=[f"{profile_id}_{a.job_url}" for a in jobs],
-    )
+    if not jobs:
+        return
+
+    texts = [a.top_applicant_reasoning for a in jobs]
+    metadatas = []
+    ids = []
+
+    for a in jobs:
+        meta = {
+            "user_id": user_id,
+            "profile_id": profile_id,
+            "analysed_at": a.analysed_at.isoformat() if hasattr(a.analysed_at, "isoformat") else str(a.analysed_at),
+            "analysis_json": a.model_dump_json(),
+            "target_role": a.target_role,
+            "target_location": a.target_location,
+            "job_url": a.job_url 
+        }
+        metadatas.append(meta)
+        ids.append(f"{profile_id}_{a.job_url}")
+
+    user_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
 
 def find_all_candidate_profiles(user_store, user_id):
     index = user_store.get_pinecone_index('agent-pipeline')

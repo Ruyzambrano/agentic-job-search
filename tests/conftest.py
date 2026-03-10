@@ -248,3 +248,20 @@ def mock_analysed_job_match_with_meta():
         attributes=["Remote"],
         key_skills=["Python"],
     )
+
+@fixture
+def mock_pinecone():
+    """Provides a fully structured Mock for Pinecone operations."""
+    store = MagicMock()
+    index = MagicMock()
+    
+    store.get_pinecone_index.return_value = index
+    store._namespace = "test_namespace"
+    
+    fetch_response = MagicMock()
+    fetch_response.vectors = {} 
+    index.fetch.return_value = fetch_response
+    
+    index.query.return_value = {"matches": []}
+    
+    return store, index, fetch_response
