@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
@@ -85,7 +85,7 @@ class AnalysedJobMatch(BaseModel):
 class AnalysedJobMatchWithMeta(AnalysedJobMatch):
     analysed_at: Optional[str] = Field(
         description="Timestamp of analysis",
-        default_factory=lambda: datetime.now().isoformat(),
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
     )
     target_role: Optional[str] = Field(
         description="The role that the agent was prioritising", default=""

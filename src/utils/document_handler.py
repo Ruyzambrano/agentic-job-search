@@ -1,6 +1,6 @@
 from glob import glob
 from os import path, remove
-from datetime import datetime
+from datetime import datetime, timezone
 import pathlib
 from io import BytesIO
 import tempfile
@@ -33,7 +33,6 @@ def ingest_input_folder(folder_path="files/input"):
     files = glob(path.join(folder_path, "*.*"))
 
     for file_path in files:
-        # MarkItDown automatically detects .docx, .pdf, .pptx, .xlsx, etc.
         try:
             log_message(f"Ingesting with MarkItDown: {path.basename(file_path)}")
             result = md.convert(file_path)
@@ -58,7 +57,7 @@ def save_findings_to_docx(state: AgentState) -> str:
 
     try:
         candidate = state["cv_data"].full_name.replace(" ", "_").lower()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
 
         analysed_jobs = state["writer_data"]
         file_name = f"{timestamp}_{candidate}_job_research.docx"
