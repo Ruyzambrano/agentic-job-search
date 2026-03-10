@@ -56,11 +56,13 @@ def show_specific_job():
     else:
         st.title("Select a job")
         st.stop()
-
+    
     full_job = get_raw_job_data(global_job_store, current_job.job_url)
 
-    display_full_job(full_job, current_job, profile)
-
+    try:
+        display_full_job(full_job, current_job, profile)
+    except AttributeError:
+        st.error("Error displaying job, try another")
 
 if __name__ == "__main__":
     show_specific_job()
