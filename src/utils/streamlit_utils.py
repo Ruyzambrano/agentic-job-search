@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import streamlit as st
 from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
@@ -294,7 +296,7 @@ def display_full_job(
     col_header, col_score = st.columns([3, 1])
     with col_header:
         st.title(f"🏢 {full_job.title}")
-        st.subheader(f"{full_job.company_name} | {full_job.location}")
+        st.subheader(f"{current_job.company} | {full_job.location}")
     with col_score:
         score = current_job.top_applicant_score
         color = "green" if score > 85 else "orange" if score > 60 else "red"
@@ -336,18 +338,27 @@ def display_full_job(
             type="primary",
         )
         with st.expander("💰 Financials & Schedule", expanded=True):
-            st.write(f"**Salary Range:** {full_job.salary_string}")
-            st.write(f"**Work Setting:** {full_job.work_setting}")
-            st.write(f"**Contract Type:** {full_job.schedule_type}")
+            st.write(f"**Salary Range:** {format_salary_as_range(current_job.salary_min, current_job.salary_max)}")
+            st.write(f"**Contract Type:** {" | ".join(current_job.attributes)}")
             st.write(f"**In-Office Policy:** {current_job.office_days}")
 
         with st.expander("📍 Requirements Checklist", expanded=True):
             for q in full_job.qualifications:
                 st.write(f"✅ {q}")
 
-        st.caption(f"Posted: {full_job.posted_at}")
+        st.caption(f"Job found at: {datetime.fromisoformat(current_job.analysed_at).strftime("%d/%m/%Y %H:%M")}")
 
-
+    if hasattr(full_job, "description"):
+        st.subheader("Job Description")
+        with st.container(border=True):
+            parts = full_job.description.split('\n')
+            for part in parts:
+                if part.strip() in [f"About {current_job.company.split()[0]}", f"About {current_job.company}", "The Role", "Responsibilities", "Person Specification", "You will"]:
+                    st.subheader(part.strip())
+                elif part.startswith("•"):
+                    st.markdown(f"* {part[1:].strip()}")
+                else:
+                    st.write(part)
 def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by: str):
     jobs = sort_analysed_job_matches_with_meta(jobs, sort_by)
     with st.sidebar:

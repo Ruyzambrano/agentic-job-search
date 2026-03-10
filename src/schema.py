@@ -31,7 +31,7 @@ class RawJobMatch(BaseModel):
     )
     description: str = Field(description="Summarized job text")
     posted_at: str = Field(default="", description="Date string from listing")
-    original_description: Optional[str] = Field(description="The original, unsummarised job description", default="")
+    description: Optional[str] = Field(description="The original, unsummarised job description", default="")
 
 
 class ListRawJobMatch(BaseModel):
@@ -79,7 +79,7 @@ class AnalysedJobMatch(BaseModel):
     top_applicant_reasoning: str = Field(
         description="A rationale why the candidate fits the role"
     )
-    original_description: Optional[str] = Field(description="The original job description from the job advert without summary", default="")
+    description: Optional[str] = Field(description="The original job description from the job advert without summary", default="")
 
 
 class AnalysedJobMatchWithMeta(AnalysedJobMatch):
