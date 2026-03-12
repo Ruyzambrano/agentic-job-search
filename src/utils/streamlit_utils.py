@@ -683,22 +683,22 @@ def render_api_settings(storage: LocalStorage):
         
         st.success("Configuration saved! Some changes may require a refresh.")
 
-
-    st.write(":red[To see a full list of models, enter your API Key below]")
+    st.divider()
+    st.write(":red[To see a full list of models, enter your API Key]")
     active_key = getattr(api, config["key"])
     if active_key:
-        st.divider()
         st.subheader("Select Models")
-        model_map = set_models_for_pipeline(new_provider)
+        free_tier = st.toggle("Show only free tier models", value=api.free_tier)
+        model_map = set_models_for_pipeline(new_provider, free_tier)
         if st.button("Save Model Configuration"):
             save_provider_config(new_provider, model_map, storage)
+            set_new_key("free_tier", free_tier, storage, "api_settings")
             st.session_state.updated_models = True
 
 
-def set_models_for_pipeline(new_provider: str) -> dict:
+def set_models_for_pipeline(new_provider: str, free_tier:bool=False) -> dict:
     api_settings = st.session_state.pipeline_settings.api_settings
     if new_provider == "Gemini" and getattr(api_settings, "gemini_api_key", None):
-        free_tier = st.toggle("Show only free tier models", value=False)
         all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
         text_models = get_gemini_text_models(all_models, free_tier)
         return get_models_for_pipelines(

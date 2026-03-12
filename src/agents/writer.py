@@ -1,4 +1,5 @@
 """Analyses the returned jobs based on the candidate profile"""
+import asyncio
 
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
@@ -21,7 +22,7 @@ from src.utils.func import log_message
 from src.utils.embeddings_handler import get_embeddings
 
 
-def create_writer_agent(writer_llm):
+def create_writer_agent(writer_llm, free_tier:bool = False):
     """Creates a writer agent"""
 
     system_prompt = """You are a Critical Recruitment Auditor. Your task is to perform a high-fidelity "Gap Analysis" between a Candidate Profile and a list of job openings.
@@ -45,10 +46,11 @@ For every job, provide:
 - Tone: Clinical, objective, and realistic. 
 - Stop being encouraging. Be accurate. If a candidate is a bad fit, say so and provide a low score.
 - Ensure the 'job_url' in your output matches the input EXACTLY."""
+    if free_tier:
+        writer_llm.rate_limiter = InMemoryRateLimiter(
+            requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
+        )
 
-    writer_llm.rate_limiter = InMemoryRateLimiter(
-        requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
-    )
     return create_agent(
         model=writer_llm,
         system_prompt=system_prompt,
@@ -56,50 +58,44 @@ For every job, provide:
     )
 
 
-def writer_node(state: AgentState, agent, config: RunnableConfig):
-    """Analyses jobs against profile with local caching logic."""
+async def writer_node(state: AgentState, agent, config: RunnableConfig):
+    """Analyses jobs against profile with local caching and parallel batching."""
     log_message("Analysing jobs against your profile...")
+    
     pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
-
-    embeddings = get_embeddings()
-    user_store = get_user_analysis_store(embeddings)
-
+    api_settings = pipeline_settings.api_settings
+    weights = pipeline_settings.weights 
     user_id = config.get("configurable", {}).get("user_id")
-    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get(
-        "profile_id"
-    )
-
+    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get("profile_id")
+    
     if not profile_id or not user_id:
         raise ValueError("Missing profile_id or user_id. Cannot perform analysis.")
 
-    research_jobs = state.get("research_data")
+    max_concurrency = 1 if api_settings.free_tier else 3
+    semaphore = asyncio.Semaphore(max_concurrency)
 
-    new_message_obj = None
+    user_store = get_user_analysis_store(get_embeddings())
+    research_jobs = state.get("research_data")
 
     final_analyses, new_jobs_to_process = check_analysis_cache(
         user_store, research_jobs, profile_id
     )
 
+    chunks_count = 0
     if new_jobs_to_process:
-        log_message(f"Cache Miss: Analyzing {len(new_jobs_to_process)} new jobs...")
-        job_list_context = ""
+        CHUNK_SIZE = 5
+        chunks = [new_jobs_to_process[i:i + CHUNK_SIZE] for i in range(0, len(new_jobs_to_process), CHUNK_SIZE)]
+        chunks_count = len(chunks)
+        
+        log_message(f"Cache Miss: Analyzing {len(new_jobs_to_process)} jobs in {chunks_count} batches...")
 
-        for i, job in enumerate(new_jobs_to_process):
-            job_list_context += f"\nNEW JOB #{i+1}:\n{job.model_dump_json()}"
-
-        expected_count = len(new_jobs_to_process)
-        new_message_obj = HumanMessage(
-            content=(
-                f"There are {expected_count} NEW jobs to analyse. "
-                f"You MUST return an analysis for EVERY SINGLE ONE ({expected_count} total). "
-                f"Data: {job_list_context}"
-            )
-        )
-
-        response = agent.invoke(
-            {**state, "messages": state["messages"] + [new_message_obj]}
-        )
-        llm_results = response["structured_response"].jobs
+        tasks = [
+            analyze_job_chunk(chunk, agent, state, api_settings.free_tier, semaphore, weights) 
+            for chunk in chunks
+        ]
+        
+        batch_results = await asyncio.gather(*tasks)
+        llm_results = [job for sublist in batch_results for job in sublist]
 
         jobs_with_meta = [
             AnalysedJobMatchWithMeta(
@@ -113,11 +109,42 @@ def writer_node(state: AgentState, agent, config: RunnableConfig):
         save_job_analyses(user_store, jobs_with_meta, user_id, profile_id)
         final_analyses.extend(jobs_with_meta)
     else:
-        log_message("🚀 All jobs retrieved from cache. Zero tokens consumed.")
+        log_message("🚀 All jobs retrieved from cache.")
 
     log_message("Analysis complete!")
 
+    summary_msg = HumanMessage(content=f"Analyzed {len(new_jobs_to_process)} new jobs across {chunks_count} batches.")
+    
     return {
-        "messages": [new_message_obj] if new_message_obj else [],
+        "messages": [summary_msg], 
         "writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses),
     }
+
+
+async def analyze_job_chunk(
+    chunk, 
+    agent, 
+    state, 
+    is_free_tier: bool, 
+    semaphore: asyncio.Semaphore,
+    weights
+):
+    """Processes a single batch of jobs with priority weighting."""
+    async with semaphore:
+        job_list_context = "\n".join([f"JOB: {j.model_dump_json()}" for j in chunk])
+        
+        prompt = (
+            f"AUDIT PRIORITIES:\n"
+            f"- Tech Skills: {weights.key_skills}/100\n"
+            f"- Experience Level: {weights.experience}/100\n"
+            f"- Seniority Match: {weights.seniority_weight}/100\n\n"
+            f"Analyze these {len(chunk)} jobs based on the above priorities:\n{job_list_context}"
+        )
+        
+        msg = HumanMessage(content=prompt)
+        response = await agent.ainvoke({**state, "messages": [msg]})
+        
+        if is_free_tier:
+            await asyncio.sleep(2.0) 
+            
+        return response["structured_response"].jobs
