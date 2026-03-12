@@ -141,7 +141,7 @@ class AgentWeights(BaseModel):
 class ScraperSettings(BaseModel):
     distance_param: int = Field(default=40)
     region: str = Field(default="uk")
-    max_jobs: int = 50
+    max_jobs: int = 20
 
 
 class ApiSettings(BaseModel):
