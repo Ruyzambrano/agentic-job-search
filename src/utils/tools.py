@@ -123,13 +123,27 @@ async def batch_scrape_jobs(
 def sanitize_query(q: str) -> str:
     q = q.upper().strip()
     q = re.sub(r"\s+", " ", q)
-
-    clean = q.replace("(", "").replace(")", "").replace("-", "")
-    terms = [t.strip() for t in clean.split(" OR ")]
-
-    unique_terms = sorted(list(set(t for t in terms if t)))
-
-    return " OR ".join(unique_terms)
+    
+    raw_terms = re.split(r'\s+OR\s+(?![^\(]*\))', q)
+    
+    clean_terms = set()
+    for term in raw_terms:
+        t = term.strip(" -._")
+        
+        if t.startswith("(") and t.endswith(")"):
+            if " AND " in t:
+                clean_terms.add(t) 
+            else:
+                internal = t[1:-1].strip()
+                for sub in re.split(r'\s+OR\s+', internal):
+                    sub_t = sub.strip(" -._")
+                    if sub_t: clean_terms.add(sub_t)
+        else:
+            if t: clean_terms.add(t)
+            
+    unique_terms = sorted(list(clean_terms))
+    
+    return " OR ".join(unique_terms).upper()
 
 def filter_redundant_queries(queries, threshold=85):
     """

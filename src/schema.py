@@ -154,6 +154,7 @@ class ApiSettings(BaseModel):
     slack_webhook: str = ""
     use_google: bool = True
     use_linkedin: bool = True
+    free_tier: bool = True
 
     gemini_reader: str = "gemini-2.5-flash-lite"
     gemini_writer: str = "gemini-3-flash-preview"

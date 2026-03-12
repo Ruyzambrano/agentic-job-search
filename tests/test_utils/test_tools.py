@@ -91,7 +91,7 @@ def test_sanitize_boolean_reordering():
     assert q1 == "PYTHON OR SQL"
 
 
-def test_sanitize_parentheses_removal():
+def test_sanitize_parentheses_removed():
     q1 = sanitize_query("(SQL OR Python) OR Java")
     q2 = sanitize_query("Java OR SQL OR Python")
     assert q1 == q2
@@ -131,4 +131,27 @@ def test_full_optimization_pipeline():
     clean_pool = list(set(sanitize_query(q) for q in raw_input))
     final = filter_redundant_queries(clean_pool, threshold=85)
 
-    assert len(final) == 2
+    assert len(final) == 3
+
+def test_sanitize_parentheses_persistence_logical():
+    """
+    Test that parentheses stay when they are logically necessary 
+    (e.g., grouping AND terms within an OR query).
+    """
+    q_mixed = "(PYTHON AND AWS) OR SQL"
+    sanitized = sanitize_query(q_mixed)
+    
+    assert "(PYTHON AND AWS)" in sanitized
+    assert "SQL" in sanitized
+    assert "OR" in sanitized
+
+def test_sanitize_nested_logic():
+    """
+    Test that complex nested logic is preserved but standardized.
+    """
+    q_complex = "(DATABRICKS OR SNOWFLAKE) AND (PYTHON OR SCALA)"
+    sanitized = sanitize_query(q_complex)
+    
+    assert "(DATABRICKS OR SNOWFLAKE)" in sanitized
+    assert "(PYTHON OR SCALA)" in sanitized
+    assert "AND" in sanitized

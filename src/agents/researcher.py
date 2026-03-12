@@ -18,21 +18,22 @@ from src.utils.embeddings_handler import get_embeddings
 
 
 def create_researcher_agent(research_llm):
-    system_prompt = """You are an Expert Search Strategist. 
+    system_prompt = """You are a Search Strategist specializing in Recruitment Engineering.
 
 ### YOUR GOAL
-Analyze the 'CandidateProfile' and generate a list of 8-10 high-intent search queries for the Google Jobs API (SerpApi).
+Generate 3-4 high-powered, Boolean-optimized search queries. Quality over quantity is essential to stay within API limits.
 
-### SEARCH ARCHITECTURE RULES
-1. **Diversity**: Create a mix of queries. Some should be specific (Exact Job Title + City), others broader (Key Skills + Region).
-2. **Boolean Logic**: Use 'OR' to group similar titles, e.g., "('Data Engineer' OR 'Data Infrastructure') London".
-3. **No Postcodes**: Use city or town names only. 
-4. **Keyword Extraction**: Identify the 3 most unique key skills in the profile and create at least two queries centered specifically on those skills.
-5. **Seniority Mapping**: If the profile indicates 5+ years of experience, include terms like 'Senior', 'Lead', or 'Principal' in 50% of the queries.
+### SEARCH RULES
+1. **Consolidation**: Instead of separate queries, use 'OR' groups. 
+   - BAD: "Data Engineer", "Data Platform Engineer"
+   - GOOD: "('Data Engineer' OR 'Data Platform Engineer' OR 'ETL Developer')"
+2. **Boolean Grouping**: Use parentheses to protect logical units, e.g., "(Python AND AWS) OR (Spark AND Java)".
+3. **Internal Operators**: You may use AND, OR, and NOT within a query.
+4. **Seniority**: If the profile has 5+ years of experience, ALWAYS group seniority terms: "(Senior OR Lead OR Principal)".
+5. **No Redundancy**: Do not repeat skills across queries. Query 1 should focus on Job Titles, Query 2 on Niche Skills, Query 3 on the Tech Stack.
 
 ### OUTPUT FORMAT
-You must return a 'SearchQueryPlan' object. Do not attempt to call any tools. Your job is finished once the queries are generated."""
-
+Return a 'SearchQueryPlan' object. Limit the output to a maximum of 4 queries."""
     return create_agent(
         model=research_llm,
         system_prompt=system_prompt,
@@ -70,22 +71,33 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
     weights = pipeline_settings.weights
     log_message(f"Researching for roles in {search_location}...")
     prompt_content = (
-        f"USER PRIORITIES:\n"
-        f"- Skill Importance: {weights.key_skills}/100\n"
-        f"- Experience Importance: {weights.experience}/100\n"
-        f"- Seniority Importance: {weights.seniority_weight}/100\n"
-        f"- Retention Risk: {weights.retention_risk}\n\n"
-        f"TASK: Create API query strings for target role {target_roles} "
-        f"based on this profile: {profile.model_dump_json()}."
-    )
+            f"USER PRIORITIES:\n"
+            f"- Skill Importance: {weights.key_skills}/100\n"
+            f"- Experience Importance: {weights.experience}/100\n"
+            f"- Seniority Importance: {weights.seniority_weight}/100\n"
+            f"- Retention Risk Level: {weights.retention_risk}\n\n"
+            
+            f"TARGET ROLES:\n"
+            f"- Anchor: {target_roles}\n"
+            f"- Instructions: Use the anchor as a base but include synonymous or adjacent titles found in the profile.\n\n"
+            
+            f"LOCATION: {search_location}\n\n"
+            
+            f"TASK:\n"
+            f"Create exactly 3-4 high-density Boolean API query strings. "
+            f"Use grouping parentheses for all OR clusters to ensure search engine precision. "
+            f"Example format: (Senior OR Lead) AND ('Data Engineer' OR 'Analytics Engineer') AND Python\n\n"
+            
+            f"PROFILE DATA (JSON): {profile.model_dump_json()}."
+   )
 
     new_message = [HumanMessage(content=prompt_content)]
     response = await agent.ainvoke(
         {**state, "messages": state["messages"] + new_message}
     )
 
-    all_queries = response["structured_response"]
-    clean_pool = list(set(sanitize_query(q) for q in all_queries.queries))
+    query_plan = response["structured_response"]
+    clean_pool = [sanitize_query(q) for q in query_plan.queries][:3]
     final_queries = filter_redundant_queries(clean_pool)
     jobs = await batch_scrape_jobs(final_queries, search_location, pipeline_settings)
     jobs = sync_with_global_library(global_store, jobs, 7)
