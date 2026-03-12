@@ -513,6 +513,13 @@ def scraping_settings_tab(storage: LocalStorage):
         index=idx_region,
         format_func=lambda x: x.upper(),
     )
+    depth_labels = {5: "Light", 10: "Balanced", 20: "Moderate", 30: "Deep", 50: "Exhaustive"}
+    new_params["max_jobs"] = st.select_slider(
+        label="Search Depth (Total Jobs)",
+        options=depth_labels,
+        format_func=depth_labels.get,
+        value=current_params.max_jobs
+    )
     save_settings(new_params, "scraper_settings", storage)
 
 
@@ -572,13 +579,11 @@ def save_settings(new_data: dict, setting_type: str, storage: LocalStorage):
             ]
             if any(changes_made):
                 st.session_state.updated_setting = True
-                st.rerun()
 
     with col_reset:
         if st.button("Reset to Default", width="stretch", key=f"reset_{setting_type}"):
             reset_setting_to_default_values(setting_type, storage)
             st.session_state.reset_settings = True
-            st.rerun()
 
 
 def show_success_toast():
