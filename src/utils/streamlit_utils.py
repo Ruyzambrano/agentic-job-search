@@ -359,6 +359,7 @@ def display_full_job(
                     st.markdown(f"* {part[1:].strip()}")
                 else:
                     st.write(part)
+
 def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by: str):
     jobs = sort_analysed_job_matches_with_meta(jobs, sort_by)
     with st.sidebar:
@@ -608,7 +609,7 @@ def hydrate_keys(storage: LocalStorage):
 
     new_data_found = False
 
-    keys_to_fetch = ["serpapi_key", "ai_provider"]
+    keys_to_fetch = ["serpapi_key", "ai_provider", "rapidapi_key", "use_google", "use_linkedin"]
     for provider, item in st.session_state.provider_config.items():
         keys_to_fetch.append(item.get("key"))
         for role in st.session_state.model_roles:
@@ -636,10 +637,9 @@ def render_api_settings(storage: LocalStorage):
     api = st.session_state.pipeline_settings.api_settings
 
     all_providers = list(st.session_state.provider_config.keys())
-    idx = (
-        all_providers.index(api.ai_provider) if api.ai_provider in all_providers else 0
-    )
+    idx = all_providers.index(api.ai_provider) if api.ai_provider in all_providers else 0
     new_provider = st.selectbox("AI Provider", all_providers, index=idx)
+    
     config = st.session_state.provider_config[new_provider]
     new_api_key = st.text_input(
         f"{new_provider} API Key",
@@ -648,26 +648,41 @@ def render_api_settings(storage: LocalStorage):
         help=f"Get your key from {config['url']}",
     ).strip()
 
-    new_serpapi_key = st.text_input(
-        "SerpAPI Key",
-        type="password",
-        value=api.serpapi_key,
-        help="Used for live job searching",
-    ).strip()
+    st.divider()
+    st.subheader("Search Provider Settings")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        new_use_google = st.toggle("Enable Google (SerpAPI)", value=api.use_google)
+        new_serpapi_key = st.text_input(
+            "SerpAPI Key",
+            type="password",
+            value=api.serpapi_key,
+            disabled=not new_use_google,
+        ).strip()
 
-    # TODO: Slack integrations
-    # st.text_input("Slack Webhook", placeholder="https://hooks.slack.com/services/...", help="Optional: Send job alerts to Slack.")
+    with col2:
+        new_use_linkedin = st.toggle("Enable LinkedIn (RapidAPI)", value=api.use_linkedin)
+        new_rapidapi_key = st.text_input(
+            "RapidAPI Key",
+            type="password",
+            value=getattr(api, "rapidapi_key", ""),
+            disabled=not new_use_linkedin,
+            help="Get from 'LinkedIn Job Search API' on RapidAPI",
+        ).strip()
 
-    if st.button("Save Keys to Browser", key="set_keys"):
-        st.session_state.changed_api_key = set_new_key(
-            config["key"], new_api_key, storage, "api_settings"
-        )
-        st.session_state.changed_provider = set_new_key(
-            "ai_provider", new_provider, storage, "api_settings"
-        )
-        st.session_state.changed_serpapi = set_new_key(
-            "serpapi_key", new_serpapi_key, storage, "api_settings"
-        )
+    if st.button("Save Settings to Browser", key="set_keys", type="primary"):
+        st.session_state.changed_api_key = set_new_key(config["key"], new_api_key, storage, "api_settings")
+        st.session_state.changed_provider = set_new_key("ai_provider", new_provider, storage, "api_settings")
+        st.session_state.changed_serpapi = set_new_key("serpapi_key", new_serpapi_key, storage, "api_settings")
+        
+        set_new_key("rapidapi_key", new_rapidapi_key, storage, "api_settings")
+        
+        set_new_key("use_google", new_use_google, storage, "api_settings")
+        set_new_key("use_linkedin", new_use_linkedin, storage, "api_settings")
+        
+        st.success("Configuration saved! Some changes may require a refresh.")
+
 
     st.write(":red[To see a full list of models, enter your API Key below]")
     active_key = getattr(api, config["key"])

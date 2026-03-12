@@ -28,7 +28,6 @@ def main_page():
     global_jobs_store = get_cached_global_store(embedding)
 
     user_id = st.user.sub
-
     if st.sidebar.button("Add New CV", width="stretch"):
         cv_handler()
 

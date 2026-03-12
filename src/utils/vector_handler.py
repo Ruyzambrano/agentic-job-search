@@ -85,6 +85,10 @@ def check_analysis_cache(store: PineconeVectorStore, jobs: list[RawJobMatch], pr
     cache_map = {f"{profile_id}_{job.job_url}": job for job in jobs}
     cache_ids = list(cache_map.keys())
     
+    if not cache_ids:
+        log_message("ℹ️ No IDs provided for cache check. Skipping Pinecone fetch.")
+        return [], []
+    
     response = index.fetch(ids=cache_ids, namespace=ns)
     existing_vectors = response.vectors if response else {}
 
