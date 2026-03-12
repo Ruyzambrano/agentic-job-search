@@ -131,7 +131,6 @@ def sanitize_query(q: str) -> str:
 
     return " OR ".join(unique_terms)
 
-higi
 def filter_redundant_queries(queries, threshold=85):
     """
     filters queries that are similar to each other
