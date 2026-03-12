@@ -688,7 +688,7 @@ def render_api_settings(storage: LocalStorage):
     active_key = getattr(api, config["key"])
     if active_key:
         st.subheader("Select Models")
-        free_tier = st.toggle("Show only free tier models", value=False)
+        free_tier = st.toggle("Show only free tier models", value=api.free_tier)
         model_map = set_models_for_pipeline(new_provider, free_tier)
         if st.button("Save Model Configuration"):
             save_provider_config(new_provider, model_map, storage)
