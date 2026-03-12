@@ -141,6 +141,7 @@ class AgentWeights(BaseModel):
 class ScraperSettings(BaseModel):
     distance_param: int = Field(default=40)
     region: str = Field(default="uk")
+    max_jobs: int = 50
 
 
 class ApiSettings(BaseModel):
@@ -149,7 +150,11 @@ class ApiSettings(BaseModel):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     serpapi_key: str = ""
+    rapidapi_key: str = ""
     slack_webhook: str = ""
+    use_google: bool = True
+    use_linkedin: bool = True
+
     gemini_reader: str = "gemini-2.5-flash-lite"
     gemini_writer: str = "gemini-3-flash-preview"
     gemini_researcher: str = "gemini-2.5-flash"
@@ -159,7 +164,6 @@ class ApiSettings(BaseModel):
     openai_writer: str = "gpt-4o"
     openai_researcher: str = "gpt-5"
 
-    anthropic_api_key: str = ""
     claude_reader: str = "claude-3-5-haiku"
     claude_writer: str = "claude-3-5-sonnet"
     claude_researcher: str = "claude-3-5-sonnet"
