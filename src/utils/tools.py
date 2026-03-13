@@ -185,7 +185,7 @@ async def get_linkedin_jobs(
     
     params = {
         "limit": scraper_settings.max_jobs,
-        "location_filter": location,
+        "location_filter": f"{location} {scraper_settings.region}",
         "title_filter": role_keywords
     }
     
