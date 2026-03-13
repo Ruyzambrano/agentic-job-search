@@ -1,135 +1,90 @@
 from datetime import datetime, timezone
-from pydantic import BaseModel, Field
+from enum import Enum
 from typing import Optional, List, Literal
+from pydantic import BaseModel, Field, field_validator
 
 
-class RawJobMatch(BaseModel):
-    job_url: str = Field(description="The unique URL (Primary Key)")
-    title: str = Field(description="Job title")
-    company_name: str = Field(default="Unknown", description="Company name")
-    location: str = Field(description="Geographic location")
+class WorkSetting(str, Enum):
+    REMOTE = "Remote"
+    HYBRID = "Hybrid"
+    ONSITE = "On-site"
+    UNKNOWN = "Unknown"
 
-    salary_min: Optional[int] = Field(
-        default=None, description="Annualized min salary (e.g. 60000)"
-    )
-    salary_max: Optional[int] = Field(
-        default=None, description="Annualized max salary (e.g. 80000)"
-    )
-    salary_string: str = Field(
-        default="Not specified",
-        description="Raw text (e.g. '£500/day' or 'Competitive')",
-    )
+class SeniorityLevel(str, Enum):
+    JUNIOR = "Junior"
+    MID = "Mid"
+    SENIOR = "Senior"
+    LEAD = "Lead"
+    EXECUTIVE = "Executive"
+    NOT_SPECIFIED = "Not specified"
 
-    work_setting: Literal["Remote", "Hybrid", "On-site", "Unknown"] = "Unknown"
-    schedule_type: Optional[str] = Field(
-        default="Unknown", description="Full-time, Part-time, Contract"
-    )
+# --- Base Models ---
+
+class JobBase(BaseModel):
+    """Shared fields for both Raw and Analysed jobs to maintain consistency."""
+    title: str = Field(..., min_length=1)
+    company: str = Field(..., alias="company_name") # Handles 'company' vs 'company_name'
+    location: str
+    job_url: str 
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+
+    class Config:
+        populate_by_name = True
+
+class RawJobMatch(JobBase):
+    salary_string: str = "Not specified"
+    work_setting: WorkSetting = WorkSetting.UNKNOWN
+    schedule_type: str = "Unknown"
     is_contract: bool = False
-
-    qualifications: List[str] = Field(
-        default_factory=list, description="Extracted skills"
-    )
-    description: str = Field(description="Summarized job text")
-    posted_at: str = Field(default="", description="Date string from listing")
-    description: Optional[str] = Field(description="The original, unsummarised job description", default="")
-
+    qualifications: List[str] = Field(default_factory=list)
+    description: str = Field(description="Summarized or original job text")
+    raw_description: Optional[str] = Field(default="", description="The full, unedited text")
+    posted_at: str = ""
 
 class ListRawJobMatch(BaseModel):
     jobs: List[RawJobMatch] = Field("A list of raw job match objects")
-
-
-class SearchQueryPlan(BaseModel):
-    queries: list[str] = Field(
-        description="A list of 5-10 optimized Google Jobs search strings"
-    )
-    reasoning: str = Field(description="Why these specific terms were chosen")
-
-
-class AnalysedJobMatch(BaseModel):
-    title: str = Field(description="The title of the job listing")
-    company: str = Field(description="The name of the company")
-    job_url: str = Field(description="The URL of the job advert")
-    location: str = Field(
-        description="The location of the role, as granular as possible"
-    )
-    office_days: Optional[str] = Field(
-        description="The number of days in the office per week/month/year",
-        default="Not specified",
-    )
-    job_summary: str = Field(description="The summarised text of the job description")
-    qualifications: List[str] = Field(
-        description="A list of qualifications needed for the role"
-    )
-    attributes: List[str] = Field(
-        description="A list of key attributes of the role, like 'full-time', 'hybrid', 'permanent'"
-    )
-    key_skills: Optional[List[str]] = Field(
-        description="The key skills that the job requires, e.g., tech stack",
-        default=[""]
-    )
-    salary_min: Optional[int] = Field(
-        description="The minimum salary range by yearly salary", default=None
-    )
-    salary_max: Optional[int] = Field(
-        description="The maximum salary range by yearly salary", default=None
-    )
-    top_applicant_score: int = Field(
-        description="A score from 0 to 100 ranking how closesly the applicant matches the role based on their cv"
-    )
-    top_applicant_reasoning: str = Field(
-        description="A rationale why the candidate fits the role"
-    )
-    description: Optional[str] = Field(description="The original job description from the job advert without summary", default="")
-
-
+class AnalysedJobMatch(JobBase):
+    job_summary: str
+    qualifications: List[str]
+    attributes: List[str]
+    key_skills: List[str] = Field(default_factory=list)
+    top_applicant_score: int = Field(ge=0, le=100)
+    top_applicant_reasoning: str
+    
+    @field_validator('top_applicant_score')
+    @classmethod
+    def validate_score(cls, v):
+        if not 0 <= v <= 100:
+            raise ValueError("Score must be between 0 and 100")
+        return v
 class AnalysedJobMatchWithMeta(AnalysedJobMatch):
+
     analysed_at: Optional[str] = Field(
         description="Timestamp of analysis",
-        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
-    )
-    target_role: Optional[str] = Field(
-        description="The role that the agent was prioritising", default=""
-    )
-    target_location: Optional[str] = Field(
-        description="The location the agent was prioritising", default=""
-    )
-
+        default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    target_role: Optional[str] = Field(description="The role that the agent was prioritising", default="")
+    target_location: Optional[str] = Field(description="The location the agent was prioritising", default="")
 
 class AnalysedJobMatchList(BaseModel):
     jobs: List[AnalysedJobMatch] = Field(description="A list of job matches")
 
-
 class AnalysedJobMatchListWithMeta(BaseModel):
-    jobs: List[AnalysedJobMatchWithMeta] = Field(
-        description="A list of job matches with metada"
-    )
-
-
+    jobs: List[AnalysedJobMatchWithMeta] = Field(description="A list of job matches with metada")
 class CandidateProfile(BaseModel):
-    full_name: str = Field(description="The candidate's full name")
-    job_titles: List[str] = Field(
-        description="Target job titles (e.g., ['Senior Python Developer', 'Backend Engineer'])"
-    )
-    key_skills: List[str] = Field(
-        description="Top 5-10 technical or soft skills found in the CV"
-    )
-    years_of_experience: int = Field(
-        description="Total years of relevant professional experience"
-    )
-    current_location: Optional[str] = Field(description="City and country of residence")
-    seniority_level: str = Field(
-        description="e.g., Junior, Mid, Senior, Lead, or Executive",
-        default="Not spefified",
-    )
-    summary: str = Field(
-        description="A 2-3 sentence professional summary of the candidate's career"
-    )
-    industries: List[str] = Field(
-        description="Industries they have worked in (e.g., ['Fintech', 'Healthcare'])"
-    )
-    work_preference: str = Field(description="Remote, Hybrid, or On-site if specified")
+    full_name: str
+    job_titles: List[str]
+    key_skills: List[str]
+    years_of_experience: int = Field(ge=0)
+    current_location: Optional[str] = None
+    seniority_level: SeniorityLevel = SeniorityLevel.NOT_SPECIFIED
+    summary: str
+    industries: List[str]
+    work_preference: WorkSetting = WorkSetting.UNKNOWN
 
 
+class SearchQueryPlan(BaseModel):
+    queries: list[str] = Field(description="A list of 5-10 optimized Google Jobs search strings")
 class AgentWeights(BaseModel):
     key_skills: int = Field(default=75)
     experience: int = Field(default=50)
@@ -146,31 +101,27 @@ class ScraperSettings(BaseModel):
 
 class ApiSettings(BaseModel):
     ai_provider: str = ""
+
     gemini_api_key: str = ""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     serpapi_key: str = ""
     rapidapi_key: str = ""
-    slack_webhook: str = ""
+
     use_google: bool = False
     use_linkedin: bool = False
     free_tier: bool = True
 
-    gemini_reader: str = "gemini-2.5-flash-lite"
-    gemini_writer: str = "gemini-3-flash-preview"
-    gemini_researcher: str = "gemini-2.5-flash"
-    gemini_embedding: str = "gemini-embedding-001"
-
-    openai_reader: str = "gpt-4o-mini"
-    openai_writer: str = "gpt-4o"
-    openai_researcher: str = "gpt-5"
-
-    claude_reader: str = "claude-3-5-haiku"
-    claude_writer: str = "claude-3-5-sonnet"
-    claude_researcher: str = "claude-3-5-sonnet"
+    models: dict = Field(default_factory=lambda: {
+        "gemini": {"reader": "gemini-2.5-flash-lite","researcher": "gemini-2.5-flash", "writer": "gemini-3-flash-preview"},
+        "openai": {"reader": "gpt-4o-mini", "researcher": "gpt-5", "writer": "gpt-4o"},
+        "claude": {"reader": "claude-3-5-haiku", "researcher": "claude-3-5-sonnet", "writer": "claude-3-5-sonnet"}
+    })
 
 
 class PipelineSettings(BaseModel):
     weights: AgentWeights = Field(default_factory=AgentWeights)
     scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)
     api_settings: ApiSettings = Field(default_factory=ApiSettings)
+
+
