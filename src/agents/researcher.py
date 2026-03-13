@@ -29,7 +29,7 @@ Generate 3-4 high-powered, Boolean-optimized search queries. Quality over quanti
    - GOOD: "('Data Engineer' OR 'Data Platform Engineer' OR 'ETL Developer')"
 2. **Boolean Grouping**: Use parentheses to protect logical units, e.g., "(Python AND AWS) OR (Spark AND Java)".
 3. **Internal Operators**: You may use AND, OR, and NOT within a query.
-4. **Seniority**: If the profile has 5+ years of experience, ALWAYS group seniority terms: "(Senior OR Lead OR Principal)".
+4. **Seniority**: If the profile has 7+ years of experience, ALWAYS group seniority terms: "(Senior OR Lead OR Principal)".
 5. **No Redundancy**: Do not repeat skills across queries. Query 1 should focus on Job Titles, Query 2 on Niche Skills, Query 3 on the Tech Stack.
 
 ### OUTPUT FORMAT
@@ -79,7 +79,7 @@ async def researcher_node(state: AgentState, agent, config: RunnableConfig):
             
             f"TARGET ROLES:\n"
             f"- Anchor: {target_roles}\n"
-            f"- Instructions: Use the anchor as a base but include synonymous or adjacent titles found in the profile.\n\n"
+            f"- Instructions: Use the anchor as a base but include synonymous or adjacent titles found in the profile. Prioritise skills surrounding the candidate's most recent roles.\n\n"
             
             f"LOCATION: {search_location}\n\n"
             
