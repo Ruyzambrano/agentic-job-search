@@ -28,7 +28,7 @@ def main_page():
     user_id = st.user.sub
 
     sidebar = st.sidebar
-    
+    sorting_container = sidebar.container()
     st.session_state.desired_role = (
         sidebar.text_input(
             label="Desired Role", 
@@ -84,8 +84,6 @@ def main_page():
             st.session_state.last_updated = time()
             status.update(label="Pipeline Complete!", state="complete")
         st.rerun()
-
-    sorting_container = st.container()
 
     sidebar.divider()
     sidebar.write("### Danger Zone:")

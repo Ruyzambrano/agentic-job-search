@@ -78,7 +78,7 @@ def main_dashboard():
     user_store = get_cached_user_store(embeddings)
     global_store = get_cached_global_store(embeddings)
     
-    user_index = user_store.get_pinecone_index('agent-pipeline')
+    user_index = user_store.get_pinecone_index(st.secrets["PINECONE_NAME"])
     zero_vector = [0.0] * 3072 
     
     profile_results = user_index.query(
@@ -95,7 +95,7 @@ def main_dashboard():
                 meta[field] = json.loads(meta[field])
         profiles.append(meta)
 
-    global_index = global_store.get_pinecone_index('agent-pipeline')
+    global_index = global_store.get_pinecone_index(st.secrets["PINECONE_NAME"])
     job_results = global_index.query(
         vector=zero_vector,
         top_k=1000,

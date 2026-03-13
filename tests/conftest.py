@@ -20,7 +20,7 @@ from src.schema import (
 @fixture
 def mock_streamlit(monkeypatch):
     mock_session = {}
-    mock_secrets = {}
+    mock_secrets = {"PINECONE_NAME": "a-fake-name"}
     monkeypatch.setattr("streamlit.session_state", mock_session)
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets

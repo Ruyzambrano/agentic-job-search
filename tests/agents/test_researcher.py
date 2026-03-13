@@ -29,6 +29,7 @@ async def test_researcher_node_success(
     mock_candidate_profile,
     mock_search_query_plan,
     mock_settings,
+    mock_streamlit
 ):
     mock_config["configurable"]["pipeline_settings"] = mock_settings
     mock_fetch.return_value = mock_candidate_profile

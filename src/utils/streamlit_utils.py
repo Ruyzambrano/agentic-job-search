@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 import streamlit as st
 from streamlit_tags import st_tags
@@ -171,6 +172,7 @@ def search_for_new_jobs(active_profile_meta: dict, user_id):
         return get_job_analysis("", config, models)
 
 
+
 def jobs_filter_sidebar(jobs: list):
     with st.sidebar:
         keywords = st_tags(
@@ -206,24 +208,19 @@ def jobs_filter_sidebar(jobs: list):
         salaries = [job.salary_min for job in jobs if job.salary_min] + [
             job.salary_max for job in jobs if job.salary_max
         ]
-        max_limit = ((max(salaries) // 1000) + 1) * 1000 if salaries else 200_000
+        max_limit = int(((max(salaries) // 1000) + 5) * 1000) if salaries else 200_000
 
-        min_choice, max_choice = st.select_slider(
+        if "salary_range" not in st.session_state:
+            st.session_state.salary_range = (0, max_limit)
+
+        
+        min_salary, max_salary = st.select_slider(
             label="Salary Range",
-            options=range(0, max_limit + 5000, 1000),
-            value=(0, max_limit),
+            options=range(0, max_limit + 5000, 5000),
+            value=st.session_state.salary_range, 
+            format_func=lambda x: f"£{x:,}"
         )
-
-        col1, col2 = st.columns(2)
-        with col1:
-            min_choice = st.number_input(
-                "Low", value=min_choice, step=1000, label_visibility="collapsed"
-            )
-        with col2:
-            max_choice = st.number_input(
-                "High", value=max_choice, step=1000, label_visibility="collapsed"
-            )
-
+    
         all_tech = set()
         for job in jobs:
             skill_data = get_job_val(job, ["key_skills", "qualifications"], [])
@@ -277,12 +274,20 @@ def jobs_filter_sidebar(jobs: list):
                 )
             ]
 
-        filtered_jobs = [
-            j
-            for j in filtered_jobs
-            if (j.salary_max or 0) >= min_choice and (j.salary_min or 0) <= max_choice
-        ]
-        return filtered_jobs
+        final_filtered = []
+        for j in filtered_jobs:
+            if not j.salary_min and not j.salary_max:
+                j_min = 0
+                j_max = 0
+            else:
+                
+                j_min = j.salary_min or 0
+                j_max = j.salary_max or max_limit
+            
+            if j_max >= min_salary and j_min <= max_salary:
+                final_filtered.append(j)
+                
+        return final_filtered
 
 
 @st.cache_data
@@ -295,8 +300,8 @@ def display_full_job(
 ):
     col_header, col_score = st.columns([3, 1])
     with col_header:
-        st.title(f"🏢 {full_job.title}")
-        st.subheader(f"{current_job.company} | {full_job.location}")
+        st.title(f"🏢 {current_job.title}")
+        st.subheader(f"{current_job.company} | {current_job.location}")
     with col_score:
         score = current_job.top_applicant_score
         color = "green" if score > 85 else "orange" if score > 60 else "red"
@@ -318,8 +323,36 @@ def display_full_job(
         st.markdown("### 📝 Job Summary")
         st.info(current_job.job_summary)
 
-        st.markdown("### 🤖 Why You're a Great Fit")
-        st.write(current_job.top_applicant_reasoning)
+        reasoning = current_job.top_applicant_reasoning
+
+        parts = re.split(r'(?i)gap[s]?:', reasoning)
+
+        with st.container(border=True):
+            if len(parts) >= 2:
+                why_text = re.sub(r'(?i)why:', '', parts[0]).strip()
+                gap_text = parts[1].strip()
+
+                st.markdown("### ✅ Why You're a Great Fit")
+                st.write(why_text)
+                
+                st.divider()
+                
+                st.markdown("#### 🚨 Gaps In Your Profile")
+                st.write(gap_text)
+                
+            elif "Why:" in reasoning or "WHY:" in reasoning:
+                why_text = re.sub(r'(?i)why:', '', reasoning).strip()
+                
+                st.markdown("#### ✅ Why You're a Great Fit")
+                st.write(why_text)
+                
+                st.divider()
+                st.markdown("#### 🚨 Gaps In Your Profile")
+                st.success("No significant gaps detected for this role.")
+                
+            else:
+                st.write("### 📝 Profile Analysis")
+                st.write(reasoning)
 
         st.markdown("### 🛠 Tech Stack")
         badge_html = "".join(
@@ -333,7 +366,7 @@ def display_full_job(
     with right_col:
         st.link_button(
             "Apply for This Role",
-            full_job.job_url,
+            current_job.job_url,
             use_container_width=True,
             type="primary",
         )
@@ -343,7 +376,7 @@ def display_full_job(
             st.write(f"**In-Office Policy:** {current_job.office_days}")
 
         with st.expander("📍 Requirements Checklist", expanded=True):
-            for q in full_job.qualifications:
+            for q in current_job.qualifications:
                 st.write(f"✅ {q}")
 
         st.caption(f"Job found at: {datetime.fromisoformat(current_job.analysed_at).strftime("%d/%m/%Y %H:%M")}")
@@ -414,7 +447,7 @@ def display_raw_job_card(job: RawJobMatch):
             st.markdown(f"**{job.company_name}** | {job.location}")
 
             setting_emoji = "🏠" if job.work_setting == "Remote" else "🏢"
-            badges = f"{setting_emoji} `{job.work_setting}` · 📅 `{job.schedule_type}`"
+            badges = f"{setting_emoji} `{job.work_setting}` · 📅 `{job.schedule_type}`".title().replace("_", "-")
             if job.is_contract:
                 badges += " · 📑 :red[Contract]"
             st.markdown(badges)
@@ -428,10 +461,12 @@ def display_raw_job_card(job: RawJobMatch):
             )
 
         st.divider()
-        salary_display = job.salary_string or "Not Specified"
+        
+        salary_display = "Not Specified"
         if job.salary_min and job.salary_max:
             salary_display = f"£{job.salary_min:,} - £{job.salary_max:,}"
-
+        elif job.salary_string:
+            salary_display = job.salary_string
         st.markdown(f"##### 💰 `{salary_display}`")
 
         snippet = (

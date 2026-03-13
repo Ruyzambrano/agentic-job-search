@@ -68,7 +68,7 @@ async def test_save_candidate_profile(mock_embed, mock_store, mock_settings, moc
     assert metadatas[0].get("user_id") == "user_123"
 
 @patch("src.utils.vector_handler.log_message")
-def test_sync_with_global_library_new_job(mock_log, mock_pinecone):
+def test_sync_with_global_library_new_job(mock_log, mock_pinecone, mock_streamlit):
     store, index, fetch_res = mock_pinecone
     
     fetch_res.vectors = {}
