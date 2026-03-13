@@ -128,10 +128,26 @@ def is_cache_expired(metadata: dict, ttl_days: int) -> bool:
 
 
 def prepare_for_storage(job: RawJobMatch) -> dict:
-    """Ensures metadata is DB-ready with a fresh timestamp."""
-    meta = job.model_dump()
-    meta["last_synced_at"] = datetime.now(timezone.utc).isoformat()
-    return meta
+    """Ensures metadata is DB-ready: no nulls, ASCII safe, and fresh timestamps."""
+    raw_meta = job.model_dump()
+    clean_meta = {}
+
+    for key, value in raw_meta.items():
+        if isinstance(value, list):
+            clean_meta[key] = [str(i) for i in value if i is not None]
+        
+        elif value is None:
+            if "salary" in key or "score" in key:
+                clean_meta[key] = 0
+            else:
+                clean_meta[key] = ""
+        
+        else:
+            clean_meta[key] = value
+
+    clean_meta["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+    
+    return clean_meta
 
 
 def parse_cached_meta(metadata: dict) -> RawJobMatch:
