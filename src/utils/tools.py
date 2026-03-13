@@ -195,8 +195,11 @@ async def get_linkedin_jobs(
         )
         response.raise_for_status()
         data = response.json()
-        
-        raw_results = data.get("jobs", []) 
+        print(data)
+        if isinstance(data, list):
+            raw_results = data
+        else:
+            raw_results = data.get("jobs", []) or data.get("data", [])
         return [map_json_to_raw_job(job) for job in raw_results]
         
     except Exception as e:

@@ -152,8 +152,8 @@ class ApiSettings(BaseModel):
     serpapi_key: str = ""
     rapidapi_key: str = ""
     slack_webhook: str = ""
-    use_google: bool = True
-    use_linkedin: bool = True
+    use_google: bool = False
+    use_linkedin: bool = False
     free_tier: bool = True
 
     gemini_reader: str = "gemini-2.5-flash-lite"

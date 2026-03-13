@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from json import loads, dumps
 from typing import List
+import hashlib
 
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.runnables import RunnableConfig
@@ -12,6 +13,17 @@ from src.schema import (
     ListRawJobMatch,
 )
 from src.utils.func import log_message
+
+def generate_safe_id(input_string: str) -> str:
+    """Creates a deterministic, ASCII-only MD5 hash of any string (URL, Title, etc)."""
+    return hashlib.md5(input_string.encode('utf-8')).hexdigest()
+
+
+def clean_text_for_embedding(text: str) -> str:
+    """Prevents Gemini 'Empty Part' errors by ensuring text is never empty or None."""
+    if not text or not text.strip():
+        return "No description provided."
+    return text.strip()
 
 
 def get_global_jobs_store(embedding_model):
@@ -77,16 +89,14 @@ def fetch_candidate_profile(profile_id: str, user_store: PineconeVectorStore) ->
 
 
 def check_analysis_cache(store: PineconeVectorStore, jobs: list[RawJobMatch], profile_id: str):
-    """Checks the store for cached data"""
     hits, misses = [], []
     index = store.get_pinecone_index('agent-pipeline')
     ns = store._namespace
 
-    cache_map = {f"{profile_id}_{job.job_url}": job for job in jobs}
+    cache_map = {generate_safe_id(f"{profile_id}_{job.job_url}"): job for job in jobs}
     cache_ids = list(cache_map.keys())
     
     if not cache_ids:
-        log_message("ℹ️ No IDs provided for cache check. Skipping Pinecone fetch.")
         return [], []
     
     response = index.fetch(ids=cache_ids, namespace=ns)
@@ -132,44 +142,46 @@ def parse_cached_meta(metadata: dict) -> RawJobMatch:
             metadata[field] = loads(metadata[field])
     return RawJobMatch(**metadata)
 
+
 def sync_with_global_library(
     global_store: PineconeVectorStore, 
     raw_results: ListRawJobMatch, 
     ttl_days: int = 7
-) -> List[RawJobMatch]:
-    """
-    Syncs a list of jobs with Pinecone. 
-    Uses batching for both reading and writing to minimize network latency.
-    """
+    ) -> List[RawJobMatch]:
     final_jobs = []
     jobs_to_upsert = []
     
+    if not raw_results.jobs:
+        log_message("ℹ️ No jobs provided to sync.")
+        return []
+
     log_message(f"🔍 Syncing {len(raw_results.jobs)} roles with Global Library")
     
     index = global_store.get_pinecone_index('agent-pipeline')
     ns = global_store._namespace
 
-    job_map = {f"{j.job_url}_{j.title}": j for j in raw_results.jobs}
+    job_map = {generate_safe_id(j.job_url): j for j in raw_results.jobs}
     unique_ids = list(job_map.keys())
 
     try:
         response = index.fetch(ids=unique_ids, namespace=ns)
         existing_vectors = response.vectors if response and hasattr(response, 'vectors') else {}    
     except Exception as e:
-        log_message(f"⚠️ Fetch Error: {e}. Proceeding with fresh sync for all.")
+        log_message(f"⚠️ Fetch Error: {e}. Proceeding with fresh sync.")
         existing_vectors = {}
 
     for uid, job in job_map.items():
         vector_data = existing_vectors.get(uid)
         existing_meta = vector_data.metadata if vector_data and hasattr(vector_data, 'metadata') else None
+        
         if not existing_meta or is_cache_expired(existing_meta, ttl_days):
             jobs_to_upsert.append({
                 "id": uid,
-                "text": job.description,
+                # FIX: Protect against empty descriptions
+                "text": clean_text_for_embedding(job.description),
                 "metadata": prepare_for_storage(job) 
             })
             final_jobs.append(job)
-            
             status = "✨ Updated" if existing_meta else "🆕 New"
             log_message(f"{status}: {job.title}")
         else:
@@ -177,9 +189,11 @@ def sync_with_global_library(
                 final_jobs.append(parse_cached_meta(existing_meta))
                 log_message(f"📦 Cached: {job.title}")
             except Exception as e:
-                log_message(f"⚠️ Parsing error for {job.title}, resyncing: {e}")
+                log_message(f"⚠️ Resyncing {job.title}: {e}")
                 jobs_to_upsert.append({
-                    "id": uid, "text": job.description, "metadata": prepare_for_storage(job)
+                    "id": uid, 
+                    "text": clean_text_for_embedding(job.description), 
+                    "metadata": prepare_for_storage(job)
                 })
                 final_jobs.append(job)
 
@@ -200,11 +214,10 @@ def sync_with_global_library(
 def save_job_analyses(
     user_store: PineconeVectorStore, jobs: list[AnalysedJobMatchWithMeta], user_id, profile_id
 ):
-    """Saves personalized analysis to the vector store."""
     if not jobs:
         return
 
-    texts = [a.top_applicant_reasoning for a in jobs]
+    texts = [clean_text_for_embedding(a.top_applicant_reasoning) for a in jobs]
     metadatas = []
     ids = []
 
@@ -219,7 +232,7 @@ def save_job_analyses(
             "job_url": a.job_url 
         }
         metadatas.append(meta)
-        ids.append(f"{profile_id}_{a.job_url}")
+        ids.append(generate_safe_id(f"{profile_id}_{a.job_url}"))
 
     user_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
 

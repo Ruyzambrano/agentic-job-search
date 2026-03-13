@@ -61,8 +61,8 @@ def show_specific_job():
 
     try:
         display_full_job(full_job, current_job, profile)
-    except AttributeError:
-        st.error("Error displaying job, try another")
+    except AttributeError as e:
+        st.error(f"Error displaying job, try another: {e}")
 
 if __name__ == "__main__":
     show_specific_job()

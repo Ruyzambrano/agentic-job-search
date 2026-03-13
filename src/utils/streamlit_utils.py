@@ -295,8 +295,8 @@ def display_full_job(
 ):
     col_header, col_score = st.columns([3, 1])
     with col_header:
-        st.title(f"🏢 {full_job.title}")
-        st.subheader(f"{current_job.company} | {full_job.location}")
+        st.title(f"🏢 {current_job.title}")
+        st.subheader(f"{current_job.company} | {current_job.location}")
     with col_score:
         score = current_job.top_applicant_score
         color = "green" if score > 85 else "orange" if score > 60 else "red"
@@ -333,7 +333,7 @@ def display_full_job(
     with right_col:
         st.link_button(
             "Apply for This Role",
-            full_job.job_url,
+            current_job.job_url,
             use_container_width=True,
             type="primary",
         )
@@ -343,7 +343,7 @@ def display_full_job(
             st.write(f"**In-Office Policy:** {current_job.office_days}")
 
         with st.expander("📍 Requirements Checklist", expanded=True):
-            for q in full_job.qualifications:
+            for q in current_job.qualifications:
                 st.write(f"✅ {q}")
 
         st.caption(f"Job found at: {datetime.fromisoformat(current_job.analysed_at).strftime("%d/%m/%Y %H:%M")}")
