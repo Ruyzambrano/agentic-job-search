@@ -3,6 +3,7 @@ from json import loads, dumps
 from typing import List
 import hashlib
 
+import streamlit as st
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.runnables import RunnableConfig
 
@@ -29,7 +30,7 @@ def clean_text_for_embedding(text: str) -> str:
 def get_global_jobs_store(embedding_model):
     """Global deduplicated jobs stored in the 'global' namespace."""
     return PineconeVectorStore(
-        index_name="agent-pipeline", 
+        index_name=st.secrets.PINECONE_NAME, 
         embedding=embedding_model,
         namespace="global_raw_jobs"
     )
@@ -38,7 +39,7 @@ def get_global_jobs_store(embedding_model):
 def get_user_analysis_store(embedding_model):
     """Personalized analyses stored in the 'user_analyses' namespace."""
     return PineconeVectorStore(
-        index_name="agent-pipeline", 
+        index_name=st.secrets.PINECONE_NAME, 
         embedding=embedding_model,
         namespace="user_job_analyses"
     )
@@ -70,7 +71,7 @@ def save_candidate_profile(
 
 
 def fetch_candidate_profile(profile_id: str, user_store: PineconeVectorStore) -> CandidateProfile:
-    index = user_store.get_pinecone_index("agent-pipeline")
+    index = user_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = user_store._namespace 
     log_message(f"🔍 Fetching ID from Namespace: '{ns}'")
     
@@ -90,7 +91,7 @@ def fetch_candidate_profile(profile_id: str, user_store: PineconeVectorStore) ->
 
 def check_analysis_cache(store: PineconeVectorStore, jobs: list[RawJobMatch], profile_id: str):
     hits, misses = [], []
-    index = store.get_pinecone_index('agent-pipeline')
+    index = store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = store._namespace
 
     cache_map = {generate_safe_id(f"{profile_id}_{job.job_url}"): job for job in jobs}
@@ -173,7 +174,7 @@ def sync_with_global_library(
 
     log_message(f"🔍 Syncing {len(raw_results.jobs)} roles with Global Library")
     
-    index = global_store.get_pinecone_index('agent-pipeline')
+    index = global_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = global_store._namespace
 
     job_map = {generate_safe_id(j.job_url): j for j in raw_results.jobs}
@@ -253,7 +254,7 @@ def save_job_analyses(
     user_store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
 
 def find_all_candidate_profiles(user_store, user_id):
-    index = user_store.get_pinecone_index('agent-pipeline')
+    index = user_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = user_store._namespace
     
     zero_vector = [0.0] * 3072 
@@ -305,7 +306,7 @@ def find_all_roles_for_profile(jobs_store, profile_id):
     return matches
 
 def find_all_roles_for_profile(jobs_store, profile_id):
-    index = jobs_store.get_pinecone_index('agent-pipeline')
+    index = jobs_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     zero_vector = [0.0] * 3072 
 
     results = index.query(
@@ -327,7 +328,7 @@ def find_all_roles_for_profile(jobs_store, profile_id):
 
 
 def find_all_roles_for_user(jobs_store, user_id):
-    index = jobs_store.get_pinecone_index('agent-pipeline')
+    index = jobs_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     zero_vector = [0.0] * 3072
 
     results = index.query(
@@ -356,7 +357,7 @@ def find_all_roles_for_user(jobs_store, user_id):
 
 def fetch_raw_job_data(global_store, job_url) -> RawJobMatch:
     """Fetches a single raw job by its URL ID without using embeddings."""
-    index = global_store.get_pinecone_index('agent-pipeline')
+    index = global_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = global_store._namespace
     
     response = index.fetch(ids=[job_url], namespace=ns)

@@ -18,7 +18,7 @@ def global_job_list():
     embeddings = get_embeddings()
     global_store = get_cached_global_store(embeddings)
 
-    index = global_store.get_pinecone_index('agent-pipeline')
+    index = global_store.get_pinecone_index(st.secrets.PINECONE_NAME)
     ns = global_store._namespace
     
     zero_vector = [0.0] * 3072 

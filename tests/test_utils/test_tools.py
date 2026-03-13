@@ -1,6 +1,8 @@
 import pytest
 import respx
 import httpx
+import re
+
 from src.utils.tools import (
     extract_best_url,
     format_results,
@@ -48,7 +50,6 @@ def test_format_results_valid_job():
     assert result.title == "Software Engineer"
     assert result.salary_string == "100k"
 
-
 @pytest.mark.asyncio
 @respx.mock
 async def test_batch_scrape_jobs_success():
@@ -57,15 +58,20 @@ async def test_batch_scrape_jobs_success():
             {"title": "DevOps", "description": "Cloud stuff", "link": "url1"}
         ]
     }
-    respx.get("https://serpapi.com/search?").mock(
+
+    respx.get(re.compile(r"https://serpapi\.com/search.*")).mock(
         return_value=httpx.Response(200, json=mock_data)
     )
 
-    result = await batch_scrape_jobs(["Python"], "London", PipelineSettings())
+    settings = PipelineSettings()
+    settings.api_settings.use_google = True 
+    settings.api_settings.serpapi_key = "fake_test_key"
+
+    result = await batch_scrape_jobs(["Python"], "London", settings)
 
     assert isinstance(result, ListRawJobMatch)
-    assert len(result.jobs) > 0
-
+    assert len(result.jobs) == 1
+    assert result.jobs[0].title == "DevOps"
 
 @pytest.mark.asyncio
 @respx.mock
