@@ -1,114 +1,160 @@
-import json
+"""
+Market Intelligence Dashboard
+SOP: Visualizes global job market trends vs. user talent profiles.
+"""
 
 import streamlit as st
-
-from src.utils.streamlit_utils import init_app
-from src.utils.streamlit_cache import get_cached_user_store, get_cached_global_store
-from src.utils.altair_handler import (
+import pandas as pd
+import altair as alt
+from src.ui.navigation import sidebar_handler
+from src.ui.altair_handler import (
     MarketAnalytics,
     create_salary_chart,
     create_skill_bar_chart,
     create_location_salary_chart,
-    create_market_heatmap,
     create_market_tightness_chart,
+    get_skill_delta,
 )
-from src.utils.embeddings_handler import get_embeddings
+from src.ui.controllers import init_app
 
-def display_dashboard(profiles, jobs):
+def display_dashboard(profiles: list, jobs: list):
+    """Renders the advanced analytical view of market data."""
     engine = MarketAnalytics(jobs, profiles)
 
     with st.sidebar:
         st.header("Dashboard Filters")
-        settings = st.multiselect(
-            "WFH, Office or Hybrid",
-            options=engine.df_j["work_setting"].unique(),
-            default=["Remote", "Hybrid", "On-site"],
+        st.caption("Refine the dataset for specific market segments.")
+
+        work_settings = st.multiselect(
+            "Work Setting",
+            options=list(engine.df_j["work_setting"].unique()),
+            default=list(engine.df_j["work_setting"].unique()),
         )
+
         seniorities = st.multiselect(
-            "Seniority",
-            options=engine.df_p["seniority_level"].unique(),
-            default=engine.df_p["seniority_level"].unique(),
+            "Seniority Level",
+            options=list(engine.df_p["seniority_level"].unique()),
+            default=list(engine.df_p["seniority_level"].unique()),
         )
 
-    # Get Data
-    df_j, df_p = engine.get_filtered_data(settings, seniorities)
+    df_j, df_p = engine.get_filtered_data(work_settings, seniorities)
 
-    # --- Metrics ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Live Opportunities", len(df_j), border=True)
-    c2.metric("Available Talent", len(df_p), border=True)
-    c3.metric("Market Avg", f"£{df_j['salary_max'].mean()/1000:,.0f}k", border=True)
+    st.markdown("### ⚡ Market Snapshot")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-    # --- Charts ---
-    st.subheader("Salary Distribution")
-    st.altair_chart(create_salary_chart(df_j), width="stretch")
+    with kpi1:
+        st.metric("Live Demand", f"{len(df_j)} Roles", border=True)
+    with kpi2:
+        st.metric("Talent Supply", f"{len(df_p)} Profiles", border=True)
+    with kpi3:
+        ratio = len(df_j) / max(len(df_p), 1)
+        st.metric(
+            "Market Tightness",
+            f"{ratio:.1f}x",
+            help="Jobs per candidate. Higher = Candidate Market.",
+            border=True,
+        )
+    with kpi4:
+        avg_max = df_j["salary_max"].mean() if not df_j.empty else 0
+        st.metric("Avg. Max Salary", f"£{avg_max/1000:,.0f}k", border=True)
 
-    st.subheader("Skill Gap Analysis (Supply vs Demand)")
-    skill_data = engine.get_skill_delta(df_j, df_p)
-    st.altair_chart(create_skill_bar_chart(skill_data))
+    st.divider()
 
-    # --- Persona Grid ---
-    st.subheader("Talent Personas")
-    cols = st.columns(3)
-    for idx, row in df_p.head(6).iterrows():
-        with cols[idx % 3]:
+    tab_financials, tab_skills, tab_geo = st.tabs(
+        ["💰 Salary Benchmarking", "🧠 Skill Gap Analysis", "📍 Geographic Dynamics"]
+    )
+
+    with tab_financials:
+        col_chart, col_stats = st.columns([2, 1])
+        with col_chart:
+            st.altair_chart(create_salary_chart(df_j), width="stretch")
+        with col_stats:
+            st.markdown("##### Salary Distribution")
+            if not df_j.empty:
+                stats = df_j["salary_max"].describe(percentiles=[0.25, 0.5, 0.75])
+                st.write(f"**Top 25%:** £{stats['75%']/1000:,.0f}k")
+                st.write(f"**Median:** £{stats['50%']/1000:,.0f}k")
+                st.write(f"**Entry Level:** £{stats['25%']/1000:,.0f}k")
+                st.info(
+                    "💡 **Insights:** Target the 75th percentile for high-leverage negotiations."
+                )
+            else:
+                st.write("No salary data available for selected filters.")
+
+    with tab_skills:
+        st.subheader("Market Demand vs. Profile Supply")
+        skill_data = engine.get_skill_delta(df_j, df_p)
+        st.altair_chart(create_skill_bar_chart(skill_data), width="stretch")
+
+        skill_data = engine.get_skill_delta(df_j, df_p)
+
+        if not skill_data.empty and "delta" in skill_data.columns:
+            missing_skills = (
+                skill_data[skill_data["delta"] < 0].sort_values("delta").head(3)
+            )
+            if not missing_skills.empty:
+                skills_list = ", ".join(
+                    [f"`{s}`" for s in missing_skills["skill"].tolist()]
+                )
+                st.warning(
+                    f"⚠️ **Upskilling Opportunity:** Undersupplied in: {skills_list}"
+                )
+        else:
+            st.info("No skill overlap data available yet.")
+    with tab_geo:
+        st.subheader("Regional Trends")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Competition by City**")
+            st.altair_chart(create_market_tightness_chart(df_j, df_p), width="stretch")
+        with c2:
+            st.markdown("**Salary by Location**")
+            st.altair_chart(create_location_salary_chart(df_j), width="stretch")
+
+    st.divider()
+    st.subheader("🕵️ Talent Persona Scout")
+    st.caption("Anonymized snapshots of candidate profiles in the current pool.")
+
+    persona_cols = st.columns(3)
+    for idx, (i, row) in enumerate(df_p.head(6).iterrows()):
+        with persona_cols[idx % 3]:
             with st.container(border=True):
-                st.markdown(f"**{engine.generate_anon_id(row['summary'])}**")
-                job_titles = row["job_titles"]
-                display_title = (
-                    job_titles[0]
-                    if isinstance(job_titles, list) and len(job_titles) > 0
-                    else "Professional"
+                anon_id = engine.generate_anon_id(row["summary"])
+                st.markdown(f"**Persona {anon_id}**")
+
+                titles = row.get("job_titles", [])
+                primary_title = titles[0] if titles else "Professional"
+                st.markdown(f"**{row['seniority_level']} {primary_title}**")
+
+                st.caption(
+                    f"📍 {row['current_location']} · 🏠 {row.get('work_preference', 'Hybrid')}"
                 )
 
-                st.markdown(f"**{row['seniority_level']} {display_title}**")
-                st.caption(f"📍 {row['current_location']}")
-                st.markdown(" ".join([f"`{s}`" for s in row["key_skills"][:3]]))
+                years = row.get("years_of_experience", 0)
+                st.progress(min(years / 15, 1.0), text=f"{years} yrs experience")
 
-    st.subheader("Location")
-    st.altair_chart(create_market_tightness_chart(df_j, df_p))
-    st.altair_chart(create_location_salary_chart(df_j))
-    st.altair_chart(create_market_heatmap(df_p))
+                skills = row.get("key_skills", [])
+                st.write(" ".join([f"`{s}`" for s in skills[:3]]))
 
 
-def main_dashboard():
+def main():
     init_app()
+    st.set_page_config(page_title="Market Intelligence", layout="wide")
 
-    embeddings = get_embeddings()
-    user_store = get_cached_user_store(embeddings)
-    global_store = get_cached_global_store(embeddings)
-    
-    user_index = user_store.get_pinecone_index(st.secrets["PINECONE_NAME"])
-    zero_vector = [0.0] * 3072 
-    
-    profile_results = user_index.query(
-        vector=zero_vector,
-        top_k=100,
-        namespace=user_store._namespace,
-        include_metadata=True
-    )
-    profiles = []
-    for m in profile_results.get("matches", []):
-        meta = m["metadata"]
-        for field in ["job_titles", "key_skills", "industries"]:
-            if isinstance(meta.get(field), str):
-                meta[field] = json.loads(meta[field])
-        profiles.append(meta)
+    storage = st.session_state.storage_service
 
-    global_index = global_store.get_pinecone_index(st.secrets["PINECONE_NAME"])
-    job_results = global_index.query(
-        vector=zero_vector,
-        top_k=1000,
-        namespace=global_store._namespace,
-        include_metadata=True
-    )
-    jobs = [m["metadata"] for m in job_results.get("matches", [])]
+    with st.spinner("Fetching Market Data..."):
+        profiles, jobs = storage.get_market_data()
 
-    if jobs and profiles:
-        display_dashboard(profiles, jobs)
-    else:
-        st.info("Gathering more market data... Upload a CV or wait for job syncing.")
+    if not jobs or not profiles:
+        st.title("📊 Market Insights")
+        st.info(
+            "Gathering more market data... Upload a CV or wait for global job syncing to unlock this dashboard."
+        )
+        st.stop()
+
+    display_dashboard(profiles, jobs)
+
 
 if __name__ == "__main__":
-
-    main_dashboard()
+    main()

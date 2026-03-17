@@ -1,20 +1,17 @@
 """Researched for jobs using SerpAPI"""
 
+from typing import Dict, Any
+
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
-from src.schema import SearchQueryPlan
-from src.utils.tools import batch_scrape_jobs, sanitize_query, filter_redundant_queries
-from src.utils.vector_handler import (
-    get_user_analysis_store,
-    get_global_jobs_store,
-    fetch_candidate_profile,
-    sync_with_global_library,
-)
+from src.schema import SearchQueryPlan, RawJobMatchList
+from src.services.job_scraper import JobScraperService
+from src.services.storage_service import StorageService
+from src.utils.text_processing import sanitize_query, filter_redundant_queries
 from src.utils.func import log_message
-from src.utils.embeddings_handler import get_embeddings
 
 
 def create_researcher_agent(research_llm):
@@ -41,65 +38,62 @@ Return a 'SearchQueryPlan' object. Limit the output to a maximum of 4 queries.""
     )
 
 
-async def researcher_node(state: AgentState, agent, config: RunnableConfig):
-    """Creates the node of the agent for workflows"""
-    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
-
-    embeddings = get_embeddings()
-    user_store = get_user_analysis_store(embeddings)
-    global_store = get_global_jobs_store(embeddings)
-
-    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get(
-        "profile_id"
-    )
-
+async def researcher_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Orchestrates the discovery phase:
+    1. Fetches candidate profile from StorageService.
+    2. Generates search strategy via LLM.
+    3. Executes scraper via JobScraperService.
+    4. Syncs results to Global Library.
+    """
+    cfg = config.get("configurable", {})
+    settings = cfg.get("pipeline_settings")
+    agent = cfg.get("researcher_agent")
+    storage: StorageService = cfg.get("storage_service")
+    scraper = cfg.get("job_scraper") or JobScraperService(settings)
+    
+    profile_id = state.get("active_profile_id") or cfg.get("profile_id")
     if not profile_id:
-        raise ValueError("No active profile ID found to research against!")
+        raise ValueError("active_profile_id is missing. Cannot research.")
 
-    user_id = config.get("configurable", {}).get("user_id")
-    target_location = config.get("configurable", {}).get("location")
-    target_roles = config.get("configurable", {}).get("role")
+    log_message("Retrieving profile for strategy planning...")
+    profile = storage.fetch_candidate_profile(profile_id)
 
-    if not user_id:
-        raise ValueError("user_id is required in config to fetch profile.")
-
-    log_message("Getting Profile metadata")
-
-    profile = fetch_candidate_profile(profile_id, user_store)
-
-    search_location = target_location or profile.current_location or "Remote"
-    weights = pipeline_settings.weights
-    log_message(f"Researching for roles in {search_location}...")
-    prompt_content = (
-            f"USER PRIORITIES:\n"
-            f"- Skill Importance: {weights.key_skills}/100\n"
-            f"- Experience Importance: {weights.experience}/100\n"
-            f"- Seniority Importance: {weights.seniority_weight}/100\n"
-            f"- Retention Risk Level: {weights.retention_risk}\n\n"
-            
-            f"TARGET ROLES:\n"
-            f"- Anchor: {target_roles}\n"
-            f"- Instructions: Use the anchor as a base but include synonymous or adjacent titles found in the profile. Prioritise skills surrounding the candidate's most recent roles.\n\n"
-            
-            f"LOCATION: {search_location}\n\n"
-            
-            f"TASK:\n"
-            f"Create exactly 3-4 high-density Boolean API query strings. "
-            f"Use grouping parentheses for all OR clusters to ensure search engine precision. "
-            f"Example format: (Senior OR Lead) AND ('Data Engineer' OR 'Analytics Engineer') AND Python\n\n"
-            
-            f"PROFILE DATA (JSON): {profile.model_dump_json()}."
-   )
-
-    new_message = [HumanMessage(content=prompt_content)]
-    response = await agent.ainvoke(
-        {**state, "messages": state["messages"] + new_message}
+    search_location = cfg.get("location") or profile.current_location or "Remote"
+    target_roles = cfg.get(
+        "role", profile.job_titles[0] if profile.job_titles else "General"
     )
 
-    query_plan = response["structured_response"]
-    clean_pool = [sanitize_query(q) for q in query_plan.queries][:3]
-    final_queries = filter_redundant_queries(clean_pool)
-    jobs = await batch_scrape_jobs(final_queries, search_location, pipeline_settings)
-    jobs = sync_with_global_library(global_store, jobs, 7)
-    log_message(f"Research complete! Found a total of {len(jobs)} jobs")
-    return {"messages": new_message, "research_data": jobs}
+    prompt_content = _build_strategy_prompt(
+        profile, target_roles, search_location, settings
+    )
+    new_message = HumanMessage(content=prompt_content)
+
+    log_message(f"Planning search strategy in {search_location}...")
+    response = await agent.ainvoke({**state, "messages": [new_message]})
+
+    query_plan: SearchQueryPlan = response["structured_response"]
+    clean_queries = [sanitize_query(q) for q in query_plan.queries][:4]
+    final_queries = filter_redundant_queries(clean_queries)
+
+    raw_results = await scraper.run_research(final_queries, search_location)
+
+    synced_jobs = storage.sync_global_library(raw_results, ttl_days=7)
+
+    log_message(f"Research complete! {len(synced_jobs)} unique roles identified.")
+
+    return {
+        "messages": [new_message], 
+        "research_data": RawJobMatchList(jobs=synced_jobs) 
+    }
+
+
+def _build_strategy_prompt(profile, roles, location, settings) -> str:
+    """Helper to keep the node logic clean and focus on the check-list."""
+    w = settings.weights
+    return (
+        f"TARGET ROLES: {roles}\n"
+        f"LOCATION: {location}\n"
+        f"WEIGHTS: Skills={w.key_skills}, Seniority={w.seniority_weight}\n"
+        f"PROFILE: {profile.model_dump_json()}"
+    )

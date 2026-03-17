@@ -5,10 +5,7 @@ from unittest.mock import patch, MagicMock
 from rich.panel import Panel
 from rich.text import Text
 
-from src.utils.func import (
-    log_message,
-    pretty_print_jobs_with_rich
-)
+from src.utils.func import log_message, pretty_print_jobs_with_rich
 
 
 @patch("src.utils.func.get_script_run_ctx")

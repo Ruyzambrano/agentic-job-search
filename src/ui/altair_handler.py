@@ -9,8 +9,6 @@ class MarketAnalytics:
         self.df_j = pd.DataFrame([j for j in jobs])
         self.df_p = pd.DataFrame([p for p in profiles])
 
-        # --- SANITIZE DATA ---
-        # Replace NaN in list columns with an empty list
         list_cols = [
             "job_titles",
             "key_skills",
@@ -28,7 +26,6 @@ class MarketAnalytics:
                     lambda x: x if isinstance(x, list) else []
                 )
 
-        # Replace NaN in string columns with an empty string or 'N/A'
         self.df_p["summary"] = self.df_p["summary"].fillna("")
         self.df_p["seniority_level"] = self.df_p["seniority_level"].fillna(
             "Not Specified"
@@ -55,7 +52,6 @@ class MarketAnalytics:
 
         combined = pd.concat([demand, supply])
 
-        # FIX: Group by 'Skill' (the name we gave it), not 'index'
         top_skills = combined.groupby("Skill")["Count"].sum().nlargest(top_n).index
 
         return combined[combined["Skill"].isin(top_skills)]
@@ -105,11 +101,9 @@ def create_skill_bar_chart(df_skills):
 
 
 def count_skills(df, col):
-    # explode turns [Python, AWS] into separate rows
     exploded = df.explode(col)
-    # value_counts().reset_index() creates a DF with Skill and Count
     counts = exploded[col].value_counts().reset_index()
-    counts.columns = ["Skill", "Count"]  # We explicitly name them here
+    counts.columns = ["Skill", "Count"]
     return counts
 
 
@@ -146,23 +140,18 @@ def create_market_heatmap(df):
 
 
 def create_market_tightness_chart(df_j, df_p):
-    # 1. Group Job data (Market Demand)
-    # Using reset_index() ensures 'clean_location' stays a column
     loc_stats = (
         df_j.groupby("clean_location")
         .agg({"salary_max": "mean", "job_url": "count"})
         .reset_index()
     )
 
-    # 2. Group Candidate data (Talent Supply)
     cand_stats = (
         df_p.groupby("clean_location").size().reset_index(name="candidate_count")
     )
 
-    # 3. Merge on the now-visible column
     merged = pd.merge(loc_stats, cand_stats, on="clean_location")
 
-    # 4. Create the chart
     return (
         alt.Chart(merged)
         .mark_circle(size=100)
@@ -182,27 +171,52 @@ def normalize_location(loc_str: str):
     if not loc_str or pd.isna(loc_str):
         return "Unknown", "Unknown"
 
-    # 1. Standardize text
     text = loc_str.lower()
 
-    # 2. Extract Work Style
     style = "On-site"
     if "remote" in text:
         style = "Remote"
     elif "hybrid" in text or "flexible" in text:
         style = "Hybrid"
 
-    # 3. Extract City
-    # Remove common noise and anything in parentheses
-    clean_city = re.sub(r"\(.*?\)", "", text)  # Remove (...)
-    clean_city = re.sub(r"uk-|-uk|uk", "", clean_city)  # Remove UK markers
+    clean_city = re.sub(r"\(.*?\)", "", text)
+    clean_city = re.sub(r"uk-|-uk|uk", "", clean_city)
 
-    # Split by common separators and take the first real word
     parts = re.split(r"[/|,-]", clean_city)
     city = parts[0].strip().title()
 
-    # Handle edge cases (like "Remote" being the only word)
     if city in ["Remote", ""]:
         city = "Remote"
 
     return city, style
+
+
+def get_skill_delta(self, df_j, df_p):
+    """
+    SOP: Calculates the gap between Job Demand and Talent Supply.
+    Returns a DataFrame with columns: ['skill', 'demand', 'supply', 'delta']
+    """
+    job_skills = df_j["key_skills"].explode().value_counts().to_dict()
+    profile_skills = df_p["key_skills"].explode().value_counts().to_dict()
+
+    all_skills = set(list(job_skills.keys()) + list(profile_skills.keys()))
+
+    data = []
+    for skill in all_skills:
+        demand = job_skills.get(skill, 0)
+        supply = profile_skills.get(skill, 0)
+        data.append(
+            {
+                "skill": skill,
+                "demand": demand,
+                "supply": supply,
+                "delta": supply - demand,
+            }
+        )
+
+    delta_df = pd.DataFrame(data)
+
+    if delta_df.empty:
+        return pd.DataFrame(columns=["skill", "demand", "supply", "delta"])
+
+    return delta_df.sort_values("demand", ascending=False)

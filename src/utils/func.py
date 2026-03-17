@@ -1,8 +1,8 @@
 import logging
 import json
-from os import environ as ENV
-from datetime import datetime
 import re
+from datetime import datetime
+from typing import List, Optional, Any
 
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -12,174 +12,150 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 
-
-from src.schema import AnalysedJobMatch, AnalysedJobMatchWithMeta, RawJobMatch
+from src.schema import AnalysedJobMatch, RawJobMatch
 
 
 class APIKeyError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    pass
 
 
 class ModelTypeError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    pass
 
 
 class ProviderError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    pass
 
 
 def validate_configuration(setting, error_message):
     if not setting:
         st.error(f"🚨 {error_message}")
         if st.button("Go to Settings"):
-            st.switch_page("pages/settings.py")
+            st.switch_page(
+                "pages/7_settings.py"
+            )  # Updated to match your folder structure
         st.stop()
 
 
 def log_message(message: str):
-    """Logs message to terminal or to streamlit depending on context"""
+    """Logs message to terminal or to streamlit depending on context."""
     logging.info(message)
-    ctx = get_script_run_ctx(True)
+    ctx = get_script_run_ctx()
     if ctx:
         try:
             st.write(message)
-        except Exception:
+        except:
             pass
 
 
-def pretty_print_jobs_with_rich(json_string):
-    """Uses rich library to print to terminal"""
-    console = Console()
-    try:
-        data = json.loads(json_string)
-    except json.JSONDecodeError:
-        console.print("[bold red]Error:[/bold red] Invalid JSON string.")
-        return
+# --- Visualization (CLI/Terminal) ---
 
-    if not data:
-        console.print("[bold red]Error:[/bold red] JSON string shape is wrong:")
-        console.print_json(data)
+
+def pretty_print_jobs_with_rich(json_data: Any):
+    """
+    Handles both JSON strings and Pydantic objects for terminal display.
+    """
+    console = Console()
+
+    if isinstance(json_data, str):
+        try:
+            data = json.loads(json_data)
+            jobs = data.get("jobs", [])
+        except json.JSONDecodeError:
+            console.print("[bold red]Error:[/bold red] Invalid JSON string.")
+            return
+    else:
+        jobs = getattr(json_data, "jobs", [])
 
     console.print(
         Panel(
-            Text(
-                "JOB LISTINGS & APPLICANT INSIGHTS", justify="center", style="bold cyan"
-            ),
+            Text("JOB AUDIT INSIGHTS", justify="center", style="bold cyan"),
             box=box.DOUBLE_EDGE,
         )
     )
 
-    for job in data.get("jobs", []):
-        table = Table(
-            title=f"[bold magenta]{job['title']}[/bold magenta]",
-            title_justify="left",
-            box=box.ROUNDED,
-            expand=True,
+    for job in jobs:
+        get = lambda attr, default=None: (
+            getattr(job, attr, default)
+            if not isinstance(job, dict)
+            else job.get(attr, default)
         )
 
+        title = get("title", "Unknown Title")
+        table = Table(
+            title=f"[bold magenta]{title}[/bold magenta]", box=box.ROUNDED, expand=True
+        )
         table.add_column("Attribute", style="cyan", width=15)
         table.add_column("Details", style="white")
 
-        table.add_row("Company", job["company"])
-        table.add_row("Location", f"{job['location']} ({job['office_days']})")
-        salary_parts = [
-            f"{s:,}"
-            for s in [job.get("salary_min"), job.get("salary_max")]
-            if s is not None
-        ]
-        salary_display = (
-            f"£{' - £'.join(salary_parts)}" if salary_parts else "Not Specified"
+        table.add_row("Company", get("company", "N/A"))
+        table.add_row("Location", get("location", "N/A"))
+
+        salary_min = get("salary_min")
+        salary_max = get("salary_max")
+        table.add_row("Salary", format_salary_as_range(salary_min, salary_max))
+
+        skills = get("key_skills", [])
+        table.add_row(
+            "Tech Stack", ", ".join(skills) if isinstance(skills, list) else "N/A"
         )
-        table.add_row("Salary", salary_display)
-        skill_display = (
-            ", ".join(job["key_skills"])
-            if isinstance(job["key_skills"], list)
-            else "N/A"
-        )
-        table.add_row("Tech Stack", skill_display)
-        attributes_display = (
-            " • ".join(job["attributes"])
-            if isinstance(job["attributes"], list)
-            else "N/A"
-        )
-        table.add_row("Attributes", attributes_display)
-        link_text = f"[link={job['job_url']}]Click to view job listing[/link]"
-        table.add_row("Listing", link_text)
+
+        link = get("job_url", "#")
+        table.add_row("Listing", f"[link={link}]View URL[/link]")
 
         console.print(table)
 
-        # Applicant Scoring Section
-        score = job["top_applicant_score"]
-        score_color = "green" if score >= 85 else "yellow" if score >= 70 else "red"
+        score = get("top_applicant_score", 0)
+        color = "green" if score >= 85 else "yellow" if score >= 70 else "red"
 
         score_text = Text()
-        score_text.append("\nTOP APPLICANT MATCH: ", style="bold")
-        score_text.append(f"{score}%", style=f"bold {score_color}")
-
+        score_text.append("\nAUDITOR MATCH SCORE: ", style="bold")
+        score_text.append(f"{score}%", style=f"bold {color}")
         console.print(score_text)
-        console.print(
-            Panel(
-                job["top_applicant_reasoning"],
-                title="Match Reasoning",
-                title_align="left",
-                border_style=score_color,
-            )
-        )
-
+        console.print(Panel(get("top_applicant_reasoning", ""), border_style=color))
         console.print("\n")
 
 
-
-def format_salary_as_range(salary_min: int, salary_max: int):
+def format_salary_as_range(salary_min: Optional[int], salary_max: Optional[int]) -> str:
     if salary_min and salary_max:
         return f"£{salary_min:,} - £{salary_max:,}"
     if salary_max:
-        return f"£{salary_max:,}"
+        return f"Up to £{salary_max:,}"
     if salary_min:
-        return f"{salary_min:,}"
+        return f"From £{salary_min:,}"
     return "Salary not specified"
 
 
-def iso_formatter(option: datetime):
-    """Makes an ISO string human readable"""
+def iso_formatter(option: Any) -> str:
+    if not option:
+        return "N/A"
     try:
-        dt = datetime.fromisoformat(option)
+        dt = datetime.fromisoformat(str(option))
         return dt.strftime("%d %b %H:%M")
     except:
-        return option
+        return str(option)
 
 
 def normalize(text: str) -> str:
     if not text:
         return ""
-    return str(text).title().replace("-", " ").replace("–", " ").strip()
+    return str(text).title().replace("-", " ").strip()
 
 
-def get_job_val(job, fields: list[str], default=None):
-    """Helper to try multiple field names on a Pydantic object."""
+def get_job_val(job: Any, fields: List[str], default: Any = None) -> Any:
+    """Helper to try multiple field names on a Pydantic object or dict."""
     for field in fields:
-        val = getattr(job, field, None)
+        val = getattr(job, field, None) if not isinstance(job, dict) else job.get(field)
         if val is not None:
             return val
     return default
 
 
-def get_colour_map(score: int) -> str:
-    """Not used anymore?"""
-    if score > 85:
-        return "green"
-    if score > 70:
-        return "orange"
-    return "red"
-
-
-def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
+def filter_jobs_by_keywords(
+    jobs: List[AnalysedJobMatch], keywords: List[str]
+) -> List[Any]:
     if not keywords:
         return jobs
-
     filtered = []
     lower_keywords = [kw.lower().strip() for kw in keywords if kw.strip()]
 
@@ -189,86 +165,86 @@ def filter_jobs_by_keywords(jobs: list[AnalysedJobMatch], keywords: list[str]):
                 str(getattr(job, "title", "")),
                 str(getattr(job, "company", "")),
                 str(getattr(job, "job_summary", "")),
-                str(getattr(job, "location", "")),
                 " ".join(getattr(job, "key_skills", []) or []),
-                " ".join(getattr(job, "attributes", []) or []),
             ]
         ).lower()
 
         if any(kw in searchable_text for kw in lower_keywords):
             filtered.append(job)
-
     return filtered
 
 
-def get_weight_map():
-    return {"None": 0, "Minimal": 25, "Moderate": 50, "High": 75, "Critical": 100}
-
-
-def sort_analysed_job_matches_with_meta(
-    jobs: list[AnalysedJobMatchWithMeta], sort_by
-) -> list[AnalysedJobMatchWithMeta]:
+def sort_analysed_job_matches_with_meta(jobs: List[Any], sort_by: str) -> List[Any]:
     sort_map = {
         "Score": "top_applicant_score",
         "Analysis Date": "analysed_at",
         "Company": "company",
         "Role": "title",
     }
+    attr = sort_map.get(sort_by, sort_by)
+    reverse = attr in ["top_applicant_score", "analysed_at"]
 
-    target_attr = sort_map.get(sort_by, sort_by)
+    is_date_sort = any(word in sort_by for word in ["date", "at"])
+    safe_default = "" if is_date_sort else 0
 
-    reverse = target_attr in ["top_applicant_score", "analysed_at"]
-    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
+    jobs.sort(
+        key=lambda x: get_job_val(x, [attr], default=safe_default), reverse=reverse
+    )
+
     return jobs
 
 
 def sort_raw_job_matches_with_meta(
-    jobs: list[RawJobMatch], sort_by
-) -> list[AnalysedJobMatchWithMeta]:
+    jobs: List[RawJobMatch], sort_by: str
+) -> List[RawJobMatch]:
     sort_map = {"Posted Date": "posted_at", "Company": "company_name", "Role": "title"}
-
-    target_attr = sort_map.get(sort_by, sort_by)
-
-    reverse = target_attr == "posted_at"
-    jobs.sort(key=lambda x: getattr(x, target_attr), reverse=reverse)
+    attr = sort_map.get(sort_by, sort_by)
+    reverse = attr == "posted_at"
+    jobs.sort(
+        key=lambda x: (
+            (getattr(x, attr) or "") if not isinstance(x, dict) else (x.get(attr) or "")
+        ),
+        reverse=reverse,
+    )
     return jobs
 
 
-def extract_base_locations(location_str: str) -> list[str]:
-    """
-    Splits 'London / Hybrid / Telford' into ['London', 'Telford']
-    and removes parentheticals like '(Remote)'.
-    """
-    if not location_str:
-        return []
-
-    normalized = location_str.replace("/", "|").replace(",", "|")
-
-    parts = [p.strip() for p in normalized.split("|")]
-
-    clean_cities = []
-    for p in parts:
-        p_clean = re.sub(r"[\(\[].*?[\)\]]", "", p)
-        p_clean = p_clean.replace("(", "").replace(")", "").strip()
-        if "remote" in p_clean.lower():
-            clean_cities.append("Remote")
-        elif "hybrid" in p_clean.lower():
-            clean_cities.append("Hybrid")
-        elif "flexible" in p_clean.lower():
-            clean_cities.append("Flexible")
-        elif len(p_clean) > 2:
-            clean_cities.append(p_clean.title())
-
-    return sorted(list(set(clean_cities)))
+def get_weight_map() -> dict:
+    return {"None": 0, "Minimal": 25, "Moderate": 50, "High": 75, "Critical": 100}
 
 
 def get_provider_config() -> dict:
     return {
-        "Gemini": {"key": "gemini_api_key", "url": "Google AI Studio"},
-        "OpenAI": {"key": "openai_api_key", "url": "OpenAI Dashboard"},
-        "Anthropic": {"key": "anthropic_api_key", "url": "Anthropic Console"},
+        "Gemini": {"key": "gemini_api_key", "url": "https://aistudio.google.com/"},
+        "OpenAI": {"key": "openai_api_key", "url": "https://platform.openai.com/"},
+        "Anthropic": {
+            "key": "anthropic_api_key",
+            "url": "https://console.anthropic.com/",
+        },
     }
 
 
-def get_model_roles() -> list[str]:
+def get_model_roles() -> List[str]:
     return ["reader", "writer", "researcher"]
+
+
+def show_success_toast():
+    """
+    Checks session state flags and displays temporary
+    success messages to the user.
+    """
+    if st.session_state.get("changed_api_key"):
+        st.toast("API Key Updated", icon="🔑")
+        st.session_state.changed_api_key = False
+
+    if st.session_state.get("updated_setting"):
+        st.toast("Settings Saved", icon="✅")
+        st.session_state.updated_setting = False
+
+    if st.session_state.get("reset_settings"):
+        st.toast("Settings Reset to Defaults", icon="🔄")
+        st.session_state.reset_settings = False
+
+    if st.session_state.get("updated_models"):
+        st.toast("Model Configuration Updated", icon="🤖")
+        st.session_state.updated_models = False

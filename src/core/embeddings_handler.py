@@ -6,8 +6,9 @@ from src.utils.func import validate_configuration
 
 @st.cache_resource
 def get_embeddings():
-    return get_gemini_embedding_model(st.secrets.EMBEDDING_MODEL, st.secrets.GEMINI_API_KEY)
-
+    return get_gemini_embedding_model(
+        st.secrets.EMBEDDING_MODEL, st.secrets.GEMINI_API_KEY
+    )
 
 
 def setup_models(api_settings):

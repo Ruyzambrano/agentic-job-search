@@ -1,67 +1,83 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, AsyncMock
 from src.agents.cv_parser import cv_parser_node
+from src.schema import CandidateProfile
 
-
-
-@patch("src.agents.cv_parser.get_embeddings") 
-@patch("src.agents.cv_parser.get_user_analysis_store")
-@patch("src.agents.cv_parser.fetch_candidate_profile")
-def test_cv_parser_node_fetches_existing(
-    mock_fetch, mock_store, mock_embed, mock_agent, mock_state, mock_candidate_profile, mock_settings
+@pytest.mark.asyncio
+async def test_cv_parser_node_fetches_existing(
+    mock_agent,
+    mock_state,
+    mock_candidate_profile,
+    mock_storage_service,
 ):
-    """Test that if an active_profile_id is provided, we skip the LLM."""
-    
+    """
+    If an active_profile_id is provided, we fetch from StorageService
+    and skip the LLM entirely.
+    """
     config = {
         "configurable": {
             "user_id": "user1",
             "active_profile_id": "prof_123",
-            "pipeline_settings": mock_settings
+            "storage_service": mock_storage_service,
+            "agent": mock_agent,
         }
     }
 
-    mock_fetch.return_value = mock_candidate_profile
-    
-    # Execute
-    result = cv_parser_node(mock_state, mock_agent, config)
+    mock_storage_service.fetch_candidate_profile.return_value = mock_candidate_profile
 
+    result = await cv_parser_node(mock_state, config)
 
     assert result["cv_data"] == mock_candidate_profile
     mock_agent.ainvoke.assert_not_called()
 
 
-# Add this to your patches
-@patch("src.agents.cv_parser.get_embeddings") 
-@patch("src.agents.cv_parser.get_user_analysis_store")
-@patch("src.agents.cv_parser.save_candidate_profile")
-@patch("src.agents.cv_parser.log_message")
-def test_cv_parser_node_parses_new(
-    mock_log, 
-    mock_save, 
-    mock_store, 
-    mock_get_embeddings, 
-    mock_agent, 
-    mock_state, 
-    mock_settings
+@pytest.mark.asyncio
+async def test_cv_parser_node_parses_new(
+    mock_agent,
+    mock_state,
+    mock_storage_service,
+    mock_candidate_profile
 ):
-    mock_get_embeddings.return_value = MagicMock() 
+    """
+    SOP: If NO profile ID is provided, we use the LLM to parse raw text
+    and save the result via StorageService.
+    """
+    mock_state["cv_raw_text"] = "Experienced Python Developer from London..."
+
+    mock_agent.ainvoke = AsyncMock(return_value={
+        "structured_response": mock_candidate_profile
+    })
     
+    mock_storage_service.save_candidate_profile.return_value = "new_prof_id"
+
     config = {
         "configurable": {
             "user_id": "user1",
-            "pipeline_settings": mock_settings
+            "storage_service": mock_storage_service,
+            "cv_parser_agent": mock_agent,
         }
     }
-    mock_save.return_value = "new_prof_id"
+
+    result = await cv_parser_node(mock_state, config)
+
+    assert result["cv_data"] == mock_candidate_profile
+    assert result["active_profile_id"] == "new_prof_id"
     
-    result = cv_parser_node(mock_state, mock_agent, config)
-    
-    assert result is not None
+    mock_agent.ainvoke.assert_called_once()
+    mock_storage_service.save_candidate_profile.assert_called_once()
 
 
-def test_cv_parser_node_missing_user_id(mock_agent, mock_state):
-    """Test that the node raises ValueError if user_id is missing."""
-    config = {"configurable": {}}  # Empty config
+@pytest.mark.asyncio
+async def test_cv_parser_node_missing_user_id(mock_agent, mock_state, mock_storage_service):
+    """
+    Ensure the node raises ValueError if critical config keys are missing.
+    """
+    config = {
+        "configurable": {
+            "storage_service": mock_storage_service,
+            "cv_parser_agent": mock_agent,
+        }
+    }
 
-    with pytest.raises(ValueError, match="user_id is missing"):
-        cv_parser_node(mock_state, mock_agent, config)
+    with pytest.raises(ValueError, match="User ID required to process CV."):
+        await cv_parser_node(mock_state, config)

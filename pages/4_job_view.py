@@ -1,68 +1,38 @@
-from time import time
+"""Detailed View: Combines AI Analysis with Raw Job Data."""
 
 import streamlit as st
-from src.utils.streamlit_utils import (
-    get_raw_job_data,
-    display_full_job,
-    find_all_candidate_profiles,
-    render_sidebar_feed,
-    init_app,
-)
-from src.utils.streamlit_cache import (
-    cached_jobs_all_user_profiles,
-    get_cached_user_store,
-    get_cached_global_store,
-    )
-from src.utils.embeddings_handler import get_embeddings
+from src.ui.components import display_full_job, render_sidebar_feed
+from src.ui.controllers import init_app
 
 def show_specific_job():
     init_app()
-    
-    if "last_updated" not in st.session_state:
-        st.session_state.last_updated = time()
+    user_id = st.user.sub if st.user else "local-user"
+    storage = st.session_state.storage_service
 
-    embeddings = get_embeddings()
-    store = get_cached_user_store(embeddings)
-    global_job_store = get_cached_global_store(embeddings)
-
-    subheader = st.sidebar.empty()
+    jobs = storage.find_all_jobs_for_user(user_id)
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )
-
-    jobs = cached_jobs_all_user_profiles(
-        store, 
-        st.user.sub, 
-        st.session_state.last_updated
-    )
-
-
-    profiles = find_all_candidate_profiles(
-        store, 
-        st.user.sub, 
-        # last_updated=st.session_state.last_updated
-    )
-    
-    if not profiles:
-        st.warning("Please upload a CV on the Home page first.")
-        st.stop()
-        
-    profile = profiles[0]
-
+    subheader = st.sidebar
     render_sidebar_feed(jobs, subheader, sort_by)
 
-    if st.session_state.get("current_job"):
-        current_job = st.session_state.current_job
-    else:
-        st.title("Select a job")
-        st.stop()
-    
-    full_job = get_raw_job_data(global_job_store, current_job.job_url)
+    current_job = st.session_state.get("current_job")
 
+    if not current_job:
+        st.info(
+            "👈 Select a job from the sidebar or Home page to see the full analysis."
+        )
+        st.stop()
+
+    with st.spinner("Fetching original job details..."):
+        raw_job = storage.find_raw_job_by_url(current_job.job_url)
     try:
-        display_full_job(full_job, current_job, profile)
-    except AttributeError as e:
-        st.error(f"Error displaying job, try another: {e}")
+        display_full_job(raw_job, current_job)
+    except Exception as e:
+        st.error(f"Display Error: {e}")
+        if st.button("Back to Home"):
+            st.switch_page("dashboard.py")
+
 
 if __name__ == "__main__":
     show_specific_job()

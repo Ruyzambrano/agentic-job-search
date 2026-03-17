@@ -13,7 +13,7 @@ graph TD
     Start((START)) --> Ingest[main.py: Ingest Input Folder]
     Ingest -->|raw_cv_text| Parser[cv_parser_node]
     Parser -->|cv_data: CandidateProfile| Researcher[researcher_node]
-    Researcher -->|research_data: ListRawJobMatch| Writer[writer_node]
+    Researcher -->|research_data: RawJobMatchList| Writer[writer_node]
     Writer -->|writer_data: AnalysedJobMatchList| Output[Save to docx and Rich Table]
     Output --> End((END))
 

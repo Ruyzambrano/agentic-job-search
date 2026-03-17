@@ -1,113 +1,60 @@
-"""See your profiles and Jobs"""
-from time import time
+"""
+Home Page: The primary workspace for the user.
+"""
 
 import streamlit as st
-
-from src.utils.streamlit_utils import (
+from src.ui.navigation import sidebar_handler, profile_selector
+from src.ui.components import (
     display_profile,
-    filter_for_profiles,
     display_job_matches,
-    search_for_new_jobs,
-    delete_profile_dialogue,
-    cv_handler,
-    process_new_cv,
-    init_app,
+    display_profile_management,
 )
-from src.utils.embeddings_handler import get_embeddings
-from src.utils.streamlit_cache import (
-    get_cached_global_store,
-    get_cached_jobs_for_profile,
-    get_cached_user_store,
-)
-
-def main_page():
-    init_app()
-    embedding = get_embeddings()
-    user_vector_store = get_cached_user_store(embedding)
-    global_jobs_store = get_cached_global_store(embedding)
-    user_id = st.user.sub
-
-    sidebar = st.sidebar
-    sorting_container = sidebar.container()
-    st.session_state.desired_role = (
-        sidebar.text_input(
-            label="Desired Role", 
-            value=st.session_state.get("desired_role", "Data Engineer"),
-            placeholder="e.g. Data Engineer"
-        )
-    )
-    st.session_state.desired_location = (
-        sidebar.text_input(
-            label="Desired Location", 
-            value=st.session_state.get("desired_location", "London"),
-            placeholder="e.g. London"
-        )
-    )
-
-    sidebar.divider()
-
-    if sidebar.button("Add New CV", use_container_width=True):
-        cv_handler()
-
-    try:
-        active_profile_meta = filter_for_profiles(user_vector_store, user_id)
-    except ValueError:
-        st.write("# Upload a CV to begin.")
-        st.stop()
+from src.ui.controllers import process_new_cv, search_for_new_jobs
 
 
-    if sidebar.button("Find jobs for the current profile", use_container_width=True):
-        st.session_state.start_searching = True
+def home_page():
+    user_id = st.user.sub if st.user else "local-user"
+    storage = st.session_state.storage_service
+    sidebar_handler()
+    st.session_state.active_profile = profile_selector(storage, user_id)
+    display_profile_management(storage, st.session_state.active_profile)
 
-    if st.session_state.get("start_processing") or st.session_state.get("start_searching"):
-        with st.status("Running Agent Pipeline...", expanded=True) as status:
-            if st.session_state.get("start_processing"):
-                st.write("### Step 1: Profile Analysis")
-                st.write("Extracting skills and experience from CV...")
-                analysis = process_new_cv(
-                    st.session_state.raw_cv_text,
-                    st.session_state.desired_role,
-                    st.session_state.desired_location,
-                )
-                st.session_state["job_analysis"] = analysis
-                st.session_state.start_processing = False
-                st.session_state.raw_cv_text = None
+    st.title("🚀 Career Discovery Dashboard")
 
-            if st.session_state.get("start_searching"):
-                st.write("### Step 2: Job Research")
-                st.write("Scouring LinkedIn and Google Jobs for matching roles...")
-                st.session_state["job_analysis"] = search_for_new_jobs(
-                    active_profile_meta, user_id
-                )
-                st.session_state.start_searching = False
+    if st.session_state.get("raw_cv_text"):
+        st.subheader("New CV Detected")
+        role = st.text_input("Target Role", value="Data Engineer")
+        loc = st.text_input("Target Location", value="London / Remote")
 
-            st.session_state.last_updated = time()
-            status.update(label="Pipeline Complete!", state="complete")
-        st.rerun()
+        if st.button("Start Full Research Pipeline", type="primary"):
+            with st.status("🤖 Running Agents...", expanded=True) as status:
+                result = process_new_cv(st.session_state.raw_cv_text, role, loc)
+                status.update(label="Research Complete!", state="complete")
 
-    sidebar.divider()
-    sidebar.write("### Danger Zone:")
-    if sidebar.button("Permanently Delete Current Profile", use_container_width=True, type="primary"):
-        delete_profile_dialogue(user_vector_store, active_profile_meta.get("profile_id"))
-        st.session_state.last_updated = time()
+    elif st.session_state.active_profile:
+        display_profile(st.session_state.active_profile)
 
-    display_profile(profile=active_profile_meta)
+        if st.button("Refresh Market Research", use_container_width=True):
+            search_for_new_jobs(st.session_state.active_profile, user_id)
 
-    jobs = get_cached_jobs_for_profile(
-        user_vector_store, 
-        active_profile_meta.get("profile_id"),
-        st.session_state.get("last_updated", time())
-    )
-
-    if jobs:
-        with sorting_container:
+        col1, _, col3 = st.columns([3, 3, 2])
+        with col1:
+            st.subheader("🎯 Top Market Matches")
+        with col3:
             sort_by = st.selectbox(
-                label="Sort Jobs by", 
-                options=["Score", "Analysis Date", "Company", "Role"]
+                label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
             )
-        st.header("Matched Jobs")
-        display_job_matches(jobs, sort_by)
+        matches = storage.find_job_matches_for_profile(
+            st.session_state.active_profile["profile_id"]
+        )
+        if matches:
+            display_job_matches(matches, sort_by)
+        else:
+            st.info("Refresh Market Reserach to see more jobs")
+
+    else:
+        st.info("Please upload a CV in the sidebar to begin your job search.")
 
 
 if __name__ == "__main__":
-    main_page()
+    home_page()
