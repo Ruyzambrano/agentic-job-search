@@ -4,6 +4,8 @@ import streamlit as st
 
 from src.ui.components import jobs_filter_sidebar, display_job_matches
 from src.ui.controllers import init_app
+from src.ui.streamlit_cache import get_cached_all_jobs_for_user
+from src.schema import AnalysedJobMatchWithMeta
 
 
 def all_jobs_page():
@@ -20,13 +22,14 @@ def all_jobs_page():
     st.write("Browse every job analysis generated across all your uploaded CVs.")
 
     with st.spinner("Loading your career library..."):
-        all_matches = storage.find_all_jobs_for_user(user_id)
+        all_matches = get_cached_all_jobs_for_user(storage, user_id)
 
     if not all_matches:
         st.info(
             "No job matches found yet. Upload a CV and run a search to get started!"
         )
     else:
+        all_matches = [AnalysedJobMatchWithMeta(**m) for m in all_matches]
         filtered_jobs = jobs_filter_sidebar(all_matches)
 
         if not filtered_jobs:

@@ -6,8 +6,8 @@ import re
 
 class MarketAnalytics:
     def __init__(self, jobs: list, profiles: list):
-        self.df_j = pd.DataFrame([j for j in jobs])
-        self.df_p = pd.DataFrame([p for p in profiles])
+        self.df_j = jobs
+        self.df_p = profiles
 
         list_cols = [
             "job_titles",

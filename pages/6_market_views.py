@@ -4,9 +4,8 @@ SOP: Visualizes global job market trends vs. user talent profiles.
 """
 
 import streamlit as st
-import pandas as pd
-import altair as alt
-from src.ui.navigation import sidebar_handler
+
+from src.ui.streamlit_cache import get_cached_market_data, get_cached_salary_chart, get_market_dfs
 from src.ui.altair_handler import (
     MarketAnalytics,
     create_salary_chart,
@@ -19,7 +18,8 @@ from src.ui.controllers import init_app
 
 def display_dashboard(profiles: list, jobs: list):
     """Renders the advanced analytical view of market data."""
-    engine = MarketAnalytics(jobs, profiles)
+    df_j, df_p = get_market_dfs(jobs, profiles)
+    engine = MarketAnalytics(df_j, df_p)
 
     with st.sidebar:
         st.header("Dashboard Filters")
@@ -139,12 +139,11 @@ def display_dashboard(profiles: list, jobs: list):
 
 def main():
     init_app()
-    st.set_page_config(page_title="Market Intelligence", layout="wide")
 
     storage = st.session_state.storage_service
 
     with st.spinner("Fetching Market Data..."):
-        profiles, jobs = storage.get_market_data()
+        profiles, jobs = get_cached_market_data(storage)
 
     if not jobs or not profiles:
         st.title("📊 Market Insights")

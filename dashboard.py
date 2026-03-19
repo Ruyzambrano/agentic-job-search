@@ -15,7 +15,6 @@ if __name__ == "__main__":
         st.stop()
 
     init_app()
-
     pages = [
         st.Page(page="pages/1_home.py", title="Home", icon="🏠", default=True),
         st.Page(page="pages/3_all_jobs.py", title="Your Matches", icon="🎯"),
@@ -30,3 +29,4 @@ if __name__ == "__main__":
 
     if nav_bar:
         nav_bar.run()
+    

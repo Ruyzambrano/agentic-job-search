@@ -1,8 +1,12 @@
 """Global Job Library: Browse every job scraped by the system."""
+from json import loads
 
 import streamlit as st
+
 from src.ui.components import jobs_filter_sidebar, display_raw_job_matches
 from src.ui.controllers import init_app
+from src.ui.streamlit_cache import get_cached_global_jobs
+from src.schema import RawJobMatch
 
 def global_job_list():
     init_app()
@@ -12,7 +16,8 @@ def global_job_list():
     st.write("Browse the master list of all jobs currently indexed in the system.")
 
     with st.spinner("Loading global index..."):
-        jobs = storage.get_all_global_jobs(limit=100)
+        jobs = get_cached_global_jobs(storage, limit=100)
+        jobs = [RawJobMatch(**loads(j)) for j in jobs]
 
     sort_options = {"Posted Date": "posted_at", "Company": "company", "Role": "title"}
     sort_label = st.sidebar.selectbox("Sort by", options=list(sort_options.keys()))

@@ -1,7 +1,8 @@
 import streamlit as st
 from src.ui.streamlit_cache import get_cv_text
 from src.ui.components import display_profile
-
+from src.ui.streamlit_cache import get_cached_user_profiles
+from src.schema import CandidateProfile
 
 def login_screen():
     """Renders the initial authentication interface."""
@@ -45,12 +46,11 @@ def profile_selector(storage, user_id):
     with st.sidebar:
         st.subheader("🕒 Saved Profiles")
 
-        profiles = storage.find_all_candidate_profiles(user_id)
+        profiles = get_cached_user_profiles(storage, user_id)
 
         if not profiles:
             st.info("No saved profiles found. Upload a CV to begin.")
             return None
-
         options = {}
         for p in profiles:
             raw_date = p.get("created_at", "")

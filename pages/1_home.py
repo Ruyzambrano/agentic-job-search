@@ -10,7 +10,8 @@ from src.ui.components import (
     display_profile_management,
 )
 from src.ui.controllers import process_new_cv, search_for_new_jobs
-
+from src.ui.streamlit_cache import generate_docx, get_cached_profile_matches, get_cached_user_profiles
+from src.schema import AnalysedJobMatchWithMeta
 
 def home_page():
     user_id = st.user.sub if st.user else "local-user"
@@ -36,6 +37,8 @@ def home_page():
 
         if st.button("Refresh Market Research", use_container_width=True):
             search_for_new_jobs(st.session_state.active_profile, user_id)
+            get_cached_profile_matches.clear()
+            st.rerun()
 
         col1, _, col3 = st.columns([3, 3, 2])
         with col1:
@@ -44,11 +47,13 @@ def home_page():
             sort_by = st.selectbox(
                 label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
             )
-        matches = storage.find_job_matches_for_profile(
+        raw_matches = get_cached_profile_matches(storage,
             st.session_state.active_profile["profile_id"]
         )
-        if matches:
+        if raw_matches:
+            matches = [AnalysedJobMatchWithMeta(**m) for m in raw_matches]
             display_job_matches(matches, sort_by)
+            # TODO: Implement Generate Docx to download the research report
         else:
             st.info("Refresh Market Reserach to see more jobs")
 
