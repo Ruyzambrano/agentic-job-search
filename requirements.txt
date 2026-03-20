@@ -27,3 +27,4 @@ google-genai
 langchain-openai
 langchain-anthropic
 langchain-pinecone
+geopy

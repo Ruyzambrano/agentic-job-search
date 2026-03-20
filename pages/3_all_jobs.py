@@ -1,32 +1,42 @@
-"""Displays a single user's job matches"""
-from time import time
+"""Displays all job matches across all of a user's profiles."""
+from json import loads
 
 import streamlit as st
 
-from src.utils.streamlit_utils import display_job_matches, jobs_filter_sidebar, init_app
-from src.utils.streamlit_cache import (
-    get_cached_user_store,
-    cached_jobs_all_user_profiles,
-)
-from src.utils.embeddings_handler import get_embeddings
+from src.ui.components import jobs_filter_sidebar, display_job_matches
+from src.ui.controllers import init_app
+from src.ui.streamlit_cache import get_cached_all_jobs_for_user
+from src.schema import AnalysedJobMatchWithMeta
 
 
 def all_jobs_page():
     init_app()
-    store = get_cached_user_store(
-        get_embeddings()
-    )
-    sort_by = st.sidebar.selectbox(
+    user_id = st.user.sub if st.user else "local-user"
+    storage = st.session_state.storage_service
+
+    sidebar = st.sidebar
+    sort_by = sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )
-    jobs = cached_jobs_all_user_profiles(store, st.user.sub, st.session_state.last_updated)
 
-    filtered_jobs = jobs_filter_sidebar(jobs)
-    st.title("All Jobs Matched to You")
-    if not filtered_jobs:
-        st.info("No job matches found yet. Run a search from the Home page!")
+    st.title("📂 All Market Matches")
+    st.write("Browse every job analysis generated across all your uploaded CVs.")
+    with st.spinner("Loading your career library..."):
+        all_matches = get_cached_all_jobs_for_user(storage, user_id)
+
+    if not all_matches:
+        st.info( 
+            "No job matches found yet. Upload a CV and run a search to get started!"
+        )
     else:
-        display_job_matches(filtered_jobs, sort_by)
+        all_matches = [AnalysedJobMatchWithMeta(**loads(m)) for m in all_matches]
+        filtered_jobs = jobs_filter_sidebar(all_matches)
+
+        if not filtered_jobs:
+            st.warning("No jobs match your current sidebar filters.")
+        else:
+            st.write(f"Showing {len(filtered_jobs)} total jobs.")
+            display_job_matches(filtered_jobs, sort_by)
 
 
 if __name__ == "__main__":

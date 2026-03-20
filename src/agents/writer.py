@@ -1,28 +1,26 @@
 """Analyses the returned jobs based on the candidate profile"""
+
 import asyncio
+from typing import Dict, Any, List
 
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
 
-from src.utils.vector_handler import (
-    check_analysis_cache,
-    get_user_analysis_store,
-    save_job_analyses,
-)
 from src.schema import (
     AnalysedJobMatchListWithMeta,
     AnalysedJobMatchList,
-    AnalysedJobMatchWithMeta,
-    PipelineSettings,
+    RawJobMatchList,
+    AnalysedJobMatchWithMeta
 )
 from src.state import AgentState
+from src.services.storage_service import StorageService
 from src.utils.func import log_message
-from src.utils.embeddings_handler import get_embeddings
+from src.utils.text_processing import generate_safe_id
 
 
-def create_writer_agent(writer_llm, free_tier:bool = False):
+def create_writer_agent(writer_llm, free_tier: bool = False):
     """Creates a writer agent"""
 
     system_prompt = """You are a Critical Recruitment Auditor. Your task is to perform a high-fidelity "Gap Analysis" between a Candidate Profile and a list of job openings.
@@ -34,18 +32,22 @@ def create_writer_agent(writer_llm, free_tier:bool = False):
 
 ### ANALYSIS CRITERIA
 For every job, provide:
-- The "Why": Specific evidence from the profile that matches the job requirements.
-- The "Gap": Explicitly list missing technologies, industry experience, or seniority mismatches. If a skill isn't in the profile, assume they DON'T have it.
-- Match Score: 
-    * 85-100%: Perfect tech stack match, correct seniority, industry alignment.
-    * 60-84%: Strong match but missing 1-2 secondary tools or slightly different industry background.
-    * 0-59%: Missing core "Must-Have" tech stack or significant seniority mismatch.
+- job_summary: A 2-3 sentence value proposition of the role.
+- attributes: List of key traits (e.g., 'Remote', 'Senior', 'Permanent').
+- top_applicant_score: A conservative 0-100 score.
+- top_applicant_reasoning: A high-fidelity "Gap Analysis". List specific evidence of matches AND explicitly list missing technologies or seniority mismatches (The "Gap").
 
 ### OUTPUT RULES
 - Use the 'AnalysedJobMatchList' format.
 - Tone: Clinical, objective, and realistic. 
 - Stop being encouraging. Be accurate. If a candidate is a bad fit, say so and provide a low score.
-- Ensure the 'job_url' in your output matches the input EXACTLY."""
+- Ensure the 'job_url' in your output matches the input EXACTLY.
+
+### FINAL JSON SAFETY CHECK
+- You are producing NATIVE JSON. 
+- If a job description contains double quotes, you MUST use single quotes in your 'Why' and 'Gap' fields.
+- Example: Instead of "He said "Hello"", use "He said 'Hello'".
+- NO NEWLINES: Everything for one job must be on a single line in the JSON string."""
     if free_tier:
         writer_llm.rate_limiter = InMemoryRateLimiter(
             requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
@@ -58,93 +60,107 @@ For every job, provide:
     )
 
 
-async def writer_node(state: AgentState, agent, config: RunnableConfig):
-    """Analyses jobs against profile with local caching and parallel batching."""
-    log_message("Analysing jobs against your profile...")
-    
-    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
-    api_settings = pipeline_settings.api_settings
-    weights = pipeline_settings.weights 
-    user_id = config.get("configurable", {}).get("user_id")
-    profile_id = state.get("active_profile_id") or config.get("configurable", {}).get("profile_id")
-    
-    if not profile_id or not user_id:
-        raise ValueError("Missing profile_id or user_id. Cannot perform analysis.")
+async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Orchestrates the analysis phase:
+    1. Checks StorageService for cached analyses.
+    2. Chunks remaining jobs for LLM processing.
+    3. Executes parallel analysis with concurrency control.
+    4. Persists new analyses.
+    """
+    cfg = config.get("configurable", {})
+    settings = cfg.get("pipeline_settings")
+    storage: StorageService = cfg.get("storage_service")
+    agent = cfg.get("writer_agent")
 
-    max_concurrency = 1 if api_settings.free_tier else 3
-    semaphore = asyncio.Semaphore(max_concurrency)
+    profile_id = state.get("active_profile_id") or cfg.get("active_profile_id")
+    research_data = state.get("research_data", [])
 
-    user_store = get_user_analysis_store(get_embeddings())
-    research_jobs = state.get("research_data")
+    if isinstance(research_data, list):
+        research_jobs = RawJobMatchList(jobs=research_data)
+    else:
+        research_jobs = research_data
 
-    final_analyses, new_jobs_to_process = check_analysis_cache(
-        user_store, research_jobs, profile_id
+    log_message(f"Auditing {len(research_jobs.jobs)} jobs against profile...")
+
+    final_analyses, jobs_to_process = storage.check_analysis_cache(
+        research_jobs, profile_id
     )
 
-    chunks_count = 0
-    if new_jobs_to_process:
-        CHUNK_SIZE = 5
-        chunks = [new_jobs_to_process[i:i + CHUNK_SIZE] for i in range(0, len(new_jobs_to_process), CHUNK_SIZE)]
-        chunks_count = len(chunks)
-        
-        log_message(f"Cache Miss: Analyzing {len(new_jobs_to_process)} jobs in {chunks_count} batches...")
-
-        tasks = [
-            analyze_job_chunk(chunk, agent, state, api_settings.free_tier, semaphore, weights) 
-            for chunk in chunks
-        ]
-        
-        batch_results = await asyncio.gather(*tasks)
-        llm_results = [job for sublist in batch_results for job in sublist]
-
-        jobs_with_meta = [
-            AnalysedJobMatchWithMeta(
-                **job.model_dump(),
-                target_role=config.get("configurable", {}).get("role"),
-                target_location=config.get("configurable", {}).get("location"),
-            )
-            for job in llm_results
-        ]
-
-        save_job_analyses(user_store, jobs_with_meta, user_id, profile_id)
-        final_analyses.extend(jobs_with_meta)
-    else:
+    if not jobs_to_process:
         log_message("🚀 All jobs retrieved from cache.")
+        final_analyses_meta = [AnalysedJobMatchWithMeta(**j.model_dump()) for j in final_analyses]
+        return {"writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses_meta)}
 
-    log_message("Analysis complete!")
+    max_concurrency = 1 if settings.api_settings.free_tier else 3
+    semaphore = asyncio.Semaphore(max_concurrency)
+    chunk_size = 3
+    chunks = [
+        jobs_to_process[i : i + chunk_size]
+        for i in range(0, len(jobs_to_process), chunk_size)
+    ]
 
-    summary_msg = HumanMessage(content=f"Analyzed {len(new_jobs_to_process)} new jobs across {chunks_count} batches.")
+    log_message(
+        f"Cache Miss: Analyzing {len(jobs_to_process)} jobs in {len(chunks)} batches..."
+    )
+
+    tasks = [
+        _analyze_chunk(chunk, agent, state, semaphore, settings) for chunk in chunks
+    ]
+    batch_results = await asyncio.gather(*tasks)
+
+    new_llm_results = [job for sublist in batch_results for job in sublist]
     
+    loc_obj = cfg.get("location")
+    target_loc_str = loc_obj.city if hasattr(loc_obj, "city") else str(loc_obj or "")
+
+    enriched_results = [
+        job.model_copy(update={
+            "target_role": cfg.get("role"),
+            "target_location": target_loc_str,
+        })
+        for job in new_llm_results
+    ]
+
+    storage.save_job_analyses(enriched_results, cfg.get("user_id"), profile_id)
+    final_analyses.extend(enriched_results)
+
+    final_analyses_meta = [
+        AnalysedJobMatchWithMeta(**job.model_dump()) 
+        if not isinstance(job, AnalysedJobMatchWithMeta) else job
+        for job in final_analyses
+    ]
+
     return {
-        "messages": [summary_msg], 
-        "writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses),
-    }
+    "writer_data": AnalysedJobMatchListWithMeta(
+        jobs=[j.model_dump() if hasattr(j, "model_dump") else j for j in final_analyses_meta]
+    ).model_dump(),
+    "messages": [HumanMessage(content=f"Audited {len(final_analyses_meta)} roles.")],
+}
 
 
-async def analyze_job_chunk(
-    chunk, 
-    agent, 
-    state, 
-    is_free_tier: bool, 
-    semaphore: asyncio.Semaphore,
-    weights
-):
-    """Processes a single batch of jobs with priority weighting."""
+async def _analyze_chunk(chunk, agent, state, semaphore, settings) -> List[Any]:
+    """Handles the actual LLM call for a subset of jobs."""
+    w = settings.weights
     async with semaphore:
-        job_list_context = "\n".join([f"JOB: {j.model_dump_json()}" for j in chunk])
+        context = "\n".join([
+            f"ID: {generate_safe_id(j.job_url)} | TITLE: {j.title} | DESC: {j.description[:1500]}" 
+            for j in chunk
+        ])
         
         prompt = (
-            f"AUDIT PRIORITIES:\n"
-            f"- Tech Skills: {weights.key_skills}/100\n"
-            f"- Experience Level: {weights.experience}/100\n"
-            f"- Seniority Match: {weights.seniority_weight}/100\n\n"
-            f"Analyze these {len(chunk)} jobs based on the above priorities:\n{job_list_context}"
+            f"--- AUDIT WEIGHTS ---\n"
+            f"Experience Strictness: {w.experience}/100\n"
+            f"Location Strictness: {w.location}/100\n"
+            f"Retention Risk Strategy: {'Prioritize Growth' if w.retention_risk else 'Lateral Match'}\n"
+            f"----------------------\n"
+            f"Analyze these {len(chunk)} jobs:\n{context}"
         )
-        
-        msg = HumanMessage(content=prompt)
-        response = await agent.ainvoke({**state, "messages": [msg]})
-        
-        if is_free_tier:
-            await asyncio.sleep(2.0) 
-            
-        return response["structured_response"].jobs
+
+        try:
+            response = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
+            structured_data = response.get("structured_response")
+            return structured_data.jobs if structured_data else []
+        except Exception as e:
+            log_message(f"⚠️ JSON Parsing Error in chunk: {str(e)[:100]}")
+            return []

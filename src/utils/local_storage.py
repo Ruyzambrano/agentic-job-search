@@ -3,6 +3,7 @@ from streamlit_local_storage import LocalStorage
 
 
 def get_local_storage():
+    """Initializes the browser storage bridge in the session state."""
     if "storage_bridge" not in st.session_state:
         st.session_state.storage_bridge = LocalStorage()
     return st.session_state.storage_bridge
@@ -10,41 +11,63 @@ def get_local_storage():
 
 def get_browser_key(key_type: str, storage: LocalStorage, setting_type: str):
     """
-    Fetches a specific key from browser storage and
-    hydrates the Pydantic session state object.
+    Fetches a key from browser storage and hydrates the Pydantic session state.
     """
-    settings = getattr(st.session_state.pipeline_settings, setting_type)
+    settings_group = getattr(st.session_state.pipeline_settings, setting_type, None)
+    if settings_group is None:
+        return None
+
     browser_key = f"{setting_type}_{key_type}"
     stored_val = storage.getItem(browser_key)
-    if stored_val != None:
-        setattr(settings, key_type, stored_val)
+
+    if stored_val is not None:
+        if (
+            isinstance(getattr(settings_group, key_type, None), int)
+            and stored_val != ""
+        ):
+            try:
+                stored_val = int(stored_val)
+            except ValueError:
+                pass
+
+        setattr(settings_group, key_type, stored_val)
         return stored_val
-    return getattr(settings, key_type, None)
+
+    return getattr(settings_group, key_type, None)
 
 
 def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type: str):
     """
-    Compares new key against the nested session state.
-    Updates both Browser and RAM state if changed.
+    Updates Browser Storage and Python state only if the value has changed.
     """
-    settings = getattr(st.session_state.pipeline_settings, setting_type, {})
-    current_val = getattr(settings, key_name, None)
+    settings_group = getattr(st.session_state.pipeline_settings, setting_type, None)
+    if settings_group is None:
+        return False
 
-    if new_key != current_val and new_key != None:
+    current_val = getattr(settings_group, key_name, None)
+
+    if new_key is not None and str(new_key) != str(current_val):
         browser_key = f"{setting_type}_{key_name}"
-        setattr(settings, key_name, new_key)
-        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")
 
+        setattr(settings_group, key_name, new_key)
+
+        storage.setItem(browser_key, new_key, key=f"set_browser_{browser_key}")
         return True
     return False
 
 
 def save_provider_config(provider: str, model_map: dict, storage: LocalStorage):
     """
-    model_map: {"reader": "gpt-4o", "writer": "gpt-4o-mini"}
+    Saves model selections (e.g., 'gemini_reader') to browser and state.
+    model_map: {"reader": "gemini-1.5-flash", "writer": "gemini-1.5-pro"}
     """
     prefix = provider.lower()
+    api_settings = st.session_state.pipeline_settings.api_settings
+
     for agent_role, model_id in model_map.items():
         storage_key = f"{prefix}_{agent_role}"
+
+        if hasattr(api_settings, storage_key):
+            setattr(api_settings, storage_key, model_id)
+
         storage.setItem(storage_key, model_id, key=f"set_{storage_key}")
-        setattr(st.session_state.pipeline_settings.api_settings, storage_key, model_id)

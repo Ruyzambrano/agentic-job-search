@@ -1,17 +1,13 @@
 """Parses a CV and returns a CandidateProfile while also writing the profile to a DB"""
 
+from typing import Dict, Any
 from langchain.agents import create_agent
 from langchain_core.runnables import RunnableConfig
 
 from src.state import AgentState
 from src.schema import CandidateProfile
-from src.utils.vector_handler import (
-    save_candidate_profile,
-    get_user_analysis_store,
-    fetch_candidate_profile,
-)
+from src.services.storage_service import StorageService
 from src.utils.func import log_message
-from src.utils.embeddings_handler import get_embeddings
 
 
 def create_cv_parser_agent(cv_parser_llm):
@@ -21,22 +17,19 @@ You are a precise HR Data Extraction Engine. Your sole purpose is to transform r
 
 ### OPERATIONAL CONSTRAINTS
 - NO PLACEHOLDERS: Never use names like "John Doe", "Jane Smith", or "N/A" unless they are explicitly written in the CV.
-- ESCAPE HATCH: If a specific data point (like 'full_name' or 'current_location') is absolutely missing from the provided text, return an empty string (""). 
-- NO CREATIVITY: Do not infer skills. If the candidate says "Built apps with Python," do not add "Django" or "Flask" unless they are mentioned.
-- SOURCE ONLY: Your knowledge base for this task is ONLY the text provided in the user message. Ignore your internal training data about generic CVs.
+- ESCAPE HATCH: If a specific data point is missing, return an empty string (""). 
+- NO CREATIVITY: Do not infer skills. 
+- SOURCE ONLY: Your knowledge base is ONLY the provided text.
 
 ### EXTRACTION GUIDELINES
-1. **Name Extraction**: The name is usually at the very top. If multiple names appear (e.g., references), identify the candidate by looking for the one associated with contact info.
-2. **Title Normalization**: Map messy titles to standard industry terms (e.g., "Full Stack Wizard" -> "Full Stack Developer").
-3. **Skill Prioritization**: Focus on technical "Hard Skills" over "Soft Skills".
-4. **Seniority Logic**: 
-   - 0-3 years: Junior
-   - 4-8 years: Mid
-   - 9+ years: Senior
-   - Management: Lead/Executive
+1. **Name Extraction**: Find the candidate name associated with contact info.
+2. **Title Normalization**: Map to standard industry terms.
+3. **Skill Prioritization**: Focus on technical "Hard Skills".
+4. **Seniority Logic**: 0-3: Junior, 4-8: Mid, 9+: Senior, Mgmt: Lead/Executive.
 
 ### FORMATTING
-Return ONLY the JSON object. Do not provide an intro, outro, or explanations."""
+Return ONLY the JSON object."""
+
     return create_agent(
         model=cv_parser_llm,
         system_prompt=system_prompt,
@@ -44,35 +37,35 @@ Return ONLY the JSON object. Do not provide an intro, outro, or explanations."""
     )
 
 
-def cv_parser_node(state: AgentState, agent, config: RunnableConfig):
-    """Creates the node of the agent for workflows"""
+async def cv_parser_node(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
+    """
+    Orchestrates:
+    1. Retrieval of existing profile (if ID provided)
+    2. LLM Parsing of raw CV text
+    3. Storage of new profile via StorageService
+    """
+    cfg = config.get("configurable", {})
+    user_id = cfg.get("user_id")
 
-    user_id = config.get("configurable", {}).get("user_id")
+    agent = cfg.get("cv_parser_agent")
+    storage: StorageService = cfg.get("storage_service")
+
     if not user_id:
-        raise ValueError(
-            "user_id is missing from the configuration. Cannot save profile."
-        )
-    pipeline_settings = config.get("configurable", {}).get("pipeline_settings")
+        raise ValueError("User ID required to process CV.")
 
-    embeddings = get_embeddings()
-    user_store = get_user_analysis_store(embeddings)
+    active_id = state.get("active_profile_id") or cfg.get("active_profile_id")
 
-    existing_profile_id = config.get("configurable", {}).get("active_profile_id")
+    if active_id:
+        log_message(f"CACHE HIT: Using existing profile")
+        profile = storage.fetch_candidate_profile(active_id)
+        return {"cv_data": profile, "active_profile_id": active_id}
 
-    if existing_profile_id:
-        cv_data = fetch_candidate_profile(existing_profile_id, user_store)
+    log_message("Starting CV Extraction...")
 
-        return {"cv_data": cv_data, "active_profile_id": existing_profile_id}
+    result = await agent.ainvoke(state)
+    cv_data: CandidateProfile = result["structured_response"]
 
-    log_message("Parsing cv...")
-    result = agent.invoke(state)
-    cv_data = result["structured_response"]
+    log_message("Parsing complete. Persisting profile...")
+    new_id = storage.save_candidate_profile(user_id, cv_data)
 
-    log_message("Parsing complete!")
-    print("\nCandidate info:")
-    print(f"Name: {cv_data.full_name}")
-    print(f"Key Skills: {cv_data.key_skills}\n")
-    print(cv_data.summary, end="\n\n")
-
-    profile_id = save_candidate_profile(user_store, user_id, cv_data, config)
-    return {"cv_data": cv_data, "active_profile_id": profile_id}
+    return {"cv_data": cv_data, "active_profile_id": new_id}

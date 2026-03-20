@@ -1,267 +1,170 @@
-from os import environ as ENV, path
-
-from unittest.mock import MagicMock
-from pytest import fixture
-from unittest.mock import patch
-from shutil import rmtree
+import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
+from datetime import datetime, timezone
 
 from src.schema import (
-    CandidateProfile,
-    ListRawJobMatch,
-    RawJobMatch,
-    AnalysedJobMatchWithMeta,
-    SearchQueryPlan,
+    CandidateProfile, 
+    RawJobMatch, 
+    RawJobMatchList, 
+    AnalysedJobMatchWithMeta, 
+    WorkSetting, 
+    SeniorityLevel,
     PipelineSettings,
     ApiSettings,
-    AgentWeights
+    AgentWeights,
+    SearchQueryPlan,
+    SearchStep,
+    LocationData
 )
+from src.services.job_scraper import JobScraperService
 
-
-@fixture
+@pytest.fixture
 def mock_streamlit(monkeypatch):
-    mock_session = {}
-    mock_secrets = {"PINECONE_NAME": "a-fake-name"}
+    mock_session = {
+        "messages": [],
+        "storage_service": MagicMock(),
+        "pipeline_settings": PipelineSettings()
+    }
+    mock_secrets = {"PINECONE_NAME": "test-index", "PINECONE_API_KEY": "fake-key"}
     monkeypatch.setattr("streamlit.session_state", mock_session)
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets
 
-@fixture
-def mock_state():
-    return {"messages": []}
-
-@fixture
+@pytest.fixture
 def mock_settings():
-    """Provides a valid PipelineSettings object for testing logic."""
     settings = PipelineSettings()
-    settings.api_settings = ApiSettings(
-        gemini_api_key="test_key",
-        ai_provider="Gemini"
-    )
+    settings.api_settings = ApiSettings(gemini_api_key="test_key", ai_provider="Gemini")
     settings.weights = AgentWeights(key_skills=80, experience=50)
     return settings
 
-@fixture
-def mock_env(monkeypatch):
-    mock_env_dict = {}
-    monkeypatch.setattr("your_module.ENV", mock_env_dict)
-    return mock_env_dict
-
-
-@fixture
+@pytest.fixture
 def mock_search_query_plan():
     return SearchQueryPlan(
-        queries=["Data Engineer", "Python Developer"], reasoning="Because"
-    )
+        steps=[SearchStep(title_stems=["Data Engin"], 
+                         must_have_skills=["Python"], 
+                         reasoning="Because")
+        ])
 
-
-@fixture(autouse=True)
-def mock_streamlit_secrets(monkeypatch):
-    mock_secrets = {}
-    monkeypatch.setattr("streamlit.secrets", mock_secrets)
-    return mock_secrets
-
-
-@fixture
-def mock_chroma_store():
-    store = MagicMock()
-    store.get.return_value = {"ids": [], "metadatas": []}
-    return store
-
-
-@fixture(autouse=True)
-def test_db_env():
-    """Sets up a clean temp DB for every test run"""
-
-    ENV["CHROMA_PATH"] = "./test_chroma_db"
-    yield
-
-    if path.exists("./test_chroma_db"):
-        rmtree("./test_chroma_db")
-
-@fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def silent_embeddings():
-    """Stop all tests from actually hitting the embedding providers."""
-    with patch("src.utils.embeddings_handler.get_embeddings") as mock:
-        mock.return_value = MagicMock()
+    with patch("src.core.embeddings_handler.get_embeddings") as mock:
+        embedding_mock = MagicMock()
+        embedding_mock.embed_query.return_value = [0.0] * 3072
+        mock.return_value = embedding_mock
         yield mock
 
-@fixture
-def mock_env(monkeypatch):
-    mock_env_dict = {}
-    monkeypatch.setattr("src.utils.func.ENV", mock_env_dict)
-    return mock_env_dict
-
-
-@fixture
-def mock_config():
-    return {
-        "configurable": {
-            "user_id": "test_001",
-            "location": "A place",
-            "role": "Theif",
-            "profile_id": "testtest",
-        }
-    }
-
-
-@fixture
-def mock_python_dev_raw_match():
-    """Creates a basic python dev raw match"""
+@pytest.fixture
+def mock_raw_job():
     return RawJobMatch(
-        title="Python Dev",
+        title="Python Developer",
         company_name="Tech Co",
-        job_url="url_1",
-        description="Coding",
         location="London",
-        salary_string="Alot",
-        schedule_type="Full-time",
-        qualifications=["something"],
-        posted_at="Yesterday",
+        job_url="https://example.com/1",
+        description="Coding in Python.",
+        qualifications=["Python", "SQL"],
+        responsibilities=["Build APIs"],
+        benefits=["Remote work"],
+        work_setting=WorkSetting.HYBRID,
+        seniority_level=SeniorityLevel.MID,
+        salary_string="£50k"
     )
 
-
-@fixture
-def mock_agent(mock_candidate_profile):
-    agent = MagicMock()
-    agent.invoke.return_value = {"structured_response": mock_candidate_profile}
-    return agent
-
-
-@fixture
-def mock_ai_eng_raw_match():
-    return RawJobMatch(
-        title="AI Eng",
-        company_name="AI Labs",
-        job_url="url_2",
-        description="Agents",
-        salary_string="Alot",
-        schedule_type="Full-time",
-        qualifications=["something"],
-        posted_at="Yesterday",
-        location="Nunya",
+@pytest.fixture
+def mock_analysed_job(mock_raw_job):
+    return AnalysedJobMatchWithMeta(
+        **mock_raw_job.model_dump(),
+        job_summary="A Python role.",
+        attributes=["Proactive"],
+        key_skills=["FastAPI"],
+        top_applicant_score=85,
+        top_applicant_reasoning="Good skills.",
+        analysed_at=datetime.now(timezone.utc).isoformat(),
+        target_role="Developer",
+        target_location="London"
     )
 
-
-@fixture
-def mock_state(mock_python_dev_raw_match, mock_ai_eng_raw_match):
-    """Provides a basic state with two jobs."""
-    return {
-        "messages": [],
-        "research_data": ListRawJobMatch(
-            jobs=[mock_python_dev_raw_match, mock_ai_eng_raw_match]
-        ),
-    }
-
-
-@fixture
+@pytest.fixture
 def mock_candidate_profile():
     return CandidateProfile(
         full_name="Ruy Zambrano",
-        job_titles=["Senior Python Developer"],
-        key_skills=["Python", "LangChain", "FastAPI"],
+        job_titles=["Senior Developer"],
+        key_skills=["Python", "AWS"],
         years_of_experience=6,
-        current_location="London, UK",
-        seniority_level="Senior",
-        summary="Expert AI Engineer specializing in agentic workflows.",
-        industries=["Fintech", "AI"],
-        work_preference="Hybrid",
+        current_location="London",
+        seniority_level=SeniorityLevel.SENIOR,
+        summary="Expert dev.",
+        industries=["Fintech"],
+        work_preference=WorkSetting.REMOTE
     )
 
-
-@fixture
-def mock_raw_jobs():
-    return ListRawJobMatch(
-        jobs=[
-            RawJobMatch(
-                title="AI Engineer",
-                company_name="TechCorp",
-                salary_string="Alot",
-                schedule_type="Full-time",
-                qualifications=["something"],
-                posted_at="Yesterday",
-                description="Building cool AI stuff.",
-                job_url="https://example.com/job1",
-                location="London",
-            )
-        ]
-    )
-
-
-@fixture
-def mock_vector_candidate_profile():
+@pytest.fixture
+def mock_state(mock_raw_job):
     return {
-        "ids": ["profile_test_001"],
-        "metadatas": [
-            {
-                "full_name": "Ruy",
-                "job_titles": '["Dev"]',
-                "key_skills": '["Python"]',
-                "years_of_experience": "5",
-                "industries": "[]",
-                "summary": "Expert",
-                "current_location": "London",
-                "work_preference": "Remote",
-            }
-        ],
+        "messages": [],
+        "research_data": RawJobMatchList(jobs=[mock_raw_job]),
     }
 
-
-@fixture(
-    params=[
-        (
-            {
-                "link": "https://google.com/search",
-                "apply_options": [{"link": "https://direct.com"}],
-            },
-            "https://direct.com",
-        ),
-        (
-            {"link": "https://google.com/search", "apply_options": []},
-            "https://google.com/search",
-        ),
-        ({"link": "https://google.com/search"}, "https://google.com/search"),
-        (
-            {"link": "https://google.com/search", "apply_options": None},
-            "https://google.com/search",
-        ),
-        ({}, "Not specified"),
-    ]
-)
-def url_test_case(request):
-    """Fixture providing a tuple of (input_data, expected_output)"""
-    return request.param
-
-
-@fixture
-def mock_analysed_job_match_with_meta():
-    return AnalysedJobMatchWithMeta(
-        title="Python Dev",
-        company="Tech Co",
-        job_url="url_1",
-        top_applicant_score=90,
-        top_applicant_reasoning="Match",
-        target_role="Dev",
-        target_location="London",
-        job_summary="t",
-        location="hjad",
-        qualifications=["Degree"],
-        attributes=["Remote"],
-        key_skills=["Python"],
-    )
-
-@fixture
+@pytest.fixture
 def mock_pinecone():
-    """Provides a fully structured Mock for Pinecone operations."""
     store = MagicMock()
     index = MagicMock()
-    
     store.get_pinecone_index.return_value = index
-    store._namespace = "test_namespace"
-    
-    fetch_response = MagicMock()
-    fetch_response.vectors = {} 
-    index.fetch.return_value = fetch_response
+    store.NS_USER_DATA = "user_data"
+    store.NS_GLOBAL_JOBS = "global_raw_jobs"
     
     index.query.return_value = {"matches": []}
+    index.fetch.return_value = MagicMock(vectors={})
     
-    return store, index, fetch_response
+    return store, index
+
+@pytest.fixture
+def mock_config():
+    return {
+        "configurable": {
+            "user_id": "user_001",
+            "profile_id": "prof_001",
+        }
+    }
+
+@pytest.fixture
+def mock_storage_service():
+    """
+    Returns a MagicMock that mimics StorageService.
+    This allows us to use .return_value on its methods in Agent tests.
+    """
+    service = MagicMock()
+    
+    service.save_candidate_profile = MagicMock()
+    service.fetch_candidate_profile = MagicMock()
+    service.check_analysis_cache = MagicMock()
+    service.save_job_analyses = MagicMock()
+    service.sync_global_library = MagicMock()
+    service.find_all_candidate_profiles = MagicMock()
+    service.find_all_jobs_for_user = MagicMock()
+    
+    service.NS_USER_DATA = "user_data"
+    service.NS_GLOBAL_JOBS = "global_jobs"
+    
+    return service
+
+@pytest.fixture
+def scraper_service(mock_settings):
+    return JobScraperService(mock_settings)
+
+@pytest.fixture
+def mock_agent():
+    """Mocks the LangChain agent/LLM used by nodes."""
+    agent = MagicMock()
+    agent.invoke.return_value = {"structured_response": MagicMock()}
+
+    agent.ainvoke = AsyncMock(return_value={"structured_response": MagicMock()})
+    return agent
+
+@pytest.fixture
+def mock_location_data():
+    return LocationData(
+        city="London",
+        state_full="Greater London",
+        country_code="gb",
+        country_full="United Kingdon"
+    )

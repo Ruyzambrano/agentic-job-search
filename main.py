@@ -1,49 +1,42 @@
-from logging import basicConfig
-import asyncio
+"""This acts as the bridge between the UI and the Graph."""
 
-from dotenv import load_dotenv
+import asyncio
 from langchain.messages import HumanMessage
 
+from src.graph import create_workflow
 from src.agents.cv_parser import create_cv_parser_agent
 from src.agents.researcher import create_researcher_agent
 from src.agents.writer import create_writer_agent
-from src.graph import create_workflow
-from src.utils.document_handler import ingest_input_folder, save_findings_to_docx
-from src.utils.func import pretty_print_jobs_with_rich, log_message
-from src.state import AgentState
+from src.utils.func import log_message
 
 
-async def run_job_matcher(raw_context, config: dict, models: dict) -> AgentState:
-    load_dotenv()
-    basicConfig(level="INFO")
-    cv_parser_agent = create_cv_parser_agent(models["reader"])
-    researcher_agent = create_researcher_agent(models["researcher"])
-    writer_agent = create_writer_agent(models["writer"])
+async def run_job_matcher(raw_context: str, config: dict, models: dict) -> dict:
+    """
+    Controller function called by streamlit_utils.process_new_cv.
+    """
+    storage = config["configurable"].get("storage_service")
+    agents = {
+        "cv_parser_agent": create_cv_parser_agent(models["reader"]),
+        "researcher_agent": create_researcher_agent(models["researcher"]),
+        "writer_agent": create_writer_agent(models["writer"]),
+    }
 
-    app = create_workflow(cv_parser_agent, researcher_agent, writer_agent)
+    config["configurable"].update({"storage_service": storage, **agents})
 
-    content = f"Parse the provided raw cv text: {raw_context}"
-    state = {"messages": [HumanMessage(content=content)]}
+    app = create_workflow()
 
-    log_message("Starting Workflow")
+    initial_state = {
+        "messages": [HumanMessage(content=f"Analyze CV Content:\n{raw_context}")],
+        "active_profile_id": config["configurable"].get("active_profile_id"),
+    }
 
-    state = await app.ainvoke(input=state, config=config)
+    log_message("🚀 Launching Agentic Workflow...")
 
-    print(save_findings_to_docx(state))
-    pretty_print_jobs_with_rich(state["writer_data"].model_dump_json())
-    log_message("SUCCESS: WORKFLOW COMPLETE")
-    return state
+    final_state = await app.ainvoke(initial_state, config=config)
+
+    log_message("✅ Workflow execution finished.")
+    return final_state
 
 
 if __name__ == "__main__":
-    desired_job = input("What job role are you looking for?\n").strip()
-    desired_location = input("Where are you looking today?\n").strip()
-    config = {
-        "configurable": {
-            "user_id": "Ruy001",
-            "location": desired_location,
-            "role": desired_job,
-        }
-    }
-    raw_context = ingest_input_folder("files/input")
-    run_job_matcher(raw_context, config)
+    pass
