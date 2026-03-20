@@ -18,14 +18,19 @@ from src.schema import (
 )
 from src.services.job_scraper import JobScraperService
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_streamlit(monkeypatch):
     mock_session = {
         "messages": [],
         "storage_service": MagicMock(),
         "pipeline_settings": PipelineSettings()
     }
-    mock_secrets = {"PINECONE_NAME": "test-index", "PINECONE_API_KEY": "fake-key"}
+    mock_secrets = {
+        "PINECONE_API_KEY": "test-key-123",
+        "SERPAPI_API_KEY": "test-serp-123",
+        "GOOGLE_API_KEY": "test-google-123",
+        "GEMINI_API_KEY": "test-gemini"
+    }
     monkeypatch.setattr("streamlit.session_state", mock_session)
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets
