@@ -1,4 +1,5 @@
 """Displays all job matches across all of a user's profiles."""
+from json import loads
 
 import streamlit as st
 
@@ -20,16 +21,15 @@ def all_jobs_page():
 
     st.title("📂 All Market Matches")
     st.write("Browse every job analysis generated across all your uploaded CVs.")
-
     with st.spinner("Loading your career library..."):
         all_matches = get_cached_all_jobs_for_user(storage, user_id)
 
     if not all_matches:
-        st.info(
+        st.info( 
             "No job matches found yet. Upload a CV and run a search to get started!"
         )
     else:
-        all_matches = [AnalysedJobMatchWithMeta(**m) for m in all_matches]
+        all_matches = [AnalysedJobMatchWithMeta(**loads(m)) for m in all_matches]
         filtered_jobs = jobs_filter_sidebar(all_matches)
 
         if not filtered_jobs:

@@ -4,8 +4,8 @@ import httpx
 from typing import List, Dict, Any
 from logging import info, error
 
-from src.schema import RawJobMatchList, RawJobMatch, PipelineSettings, WorkSetting, SeniorityLevel
-
+from src.schema import RawJobMatchList, RawJobMatch, PipelineSettings, WorkSetting, SeniorityLevel, SearchStep, LocationData
+from src.utils.query_compiler import JobQueryCompiler
 
 class JobScraperService:
     """
@@ -21,34 +21,41 @@ class JobScraperService:
             asyncio.Semaphore(1) if self.api_cfg.free_tier else asyncio.Semaphore(3)
         )
 
-    async def run_research(self, queries: List[str], location: str) -> RawJobMatchList:
+    async def run_research(self, queries: List[SearchStep], location: LocationData) -> RawJobMatchList:
         """Primary entry point to gather jobs from all enabled sources."""
         if not (self.api_cfg.use_google or self.api_cfg.use_linkedin):
             info("⚠️ No scrapers enabled. Skipping search.")
             return RawJobMatchList(jobs=[])
 
-        location_clean = location.lower().replace("uk", "united kingdom")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             tasks = []
             for q in queries:
                 if self.api_cfg.use_google:
-                    tasks.append(self._scrape_google(client, q, location_clean))
+                    tasks.append(self._scrape_google(client, q, location))
                 if self.api_cfg.use_linkedin:
-                    tasks.append(self._scrape_linkedin(client, q, location_clean))
+                    tasks.append(self._scrape_linkedin(client, q, location))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        return self._process_and_deduplicate(results)
+        all_jobs = []
+        for res in results:
+            if isinstance(res, list):
+                all_jobs.extend(res)
+            elif isinstance(res, Exception):
+                error(f"⚠️ Task failed during gather: {res}")
+
+        return self._process_and_deduplicate(all_jobs)
 
     async def _scrape_google(
-        self, client: httpx.AsyncClient, query: str, location: str
+        self, client: httpx.AsyncClient, query: SearchStep, location: LocationData
     ) -> List[RawJobMatch]:
         """Internal handler for SerpAPI (Google Jobs)."""
+        optimised_query = JobQueryCompiler.to_google(query)
         params = {
             "engine": "google_jobs",
-            "q": query,
-            "location": location,
+            "q": optimised_query,
+            "location": location.google_string,
             "hl": "en",
             "lrad": str(self.scrap_cfg.distance_param),
             "gl": self.scrap_cfg.region,
@@ -64,19 +71,21 @@ class JobScraperService:
             error(f"Google Scrape Error for query '{query}': {e}")
             return []
 
-    async def _scrape_linkedin(
-        self, client: httpx.AsyncClient, query: str, location: str
-    ) -> List[RawJobMatch]:
+    async def _scrape_linkedin(self, client, query_obj: SearchStep, location: LocationData):
         """Internal handler for RapidAPI (LinkedIn). Uses semaphore for rate limiting."""
         async with self._semaphore:
             headers = {
                 "X-RapidAPI-Key": self.api_cfg.rapidapi_key,
                 "X-RapidAPI-Host": "linkedin-job-search-api.p.rapidapi.com",
             }
+            compiled = JobQueryCompiler.to_linkedin(query_obj)
+        
             params = {
                 "limit": self.scrap_cfg.max_jobs,
-                "location_filter": f"{location} {self.scrap_cfg.region}",
-                "title_filter": query,
+                "location_filter": location.linkedin_string,
+                "advanced_title_filter": compiled["title"], 
+                "description_filter": compiled["skills"],
+                "description_type": "text",
             }
             try:
                 response = await client.get(
@@ -93,17 +102,15 @@ class JobScraperService:
 
                 return [self._map_linkedin_to_schema(job) for job in jobs]
             except Exception as e:
-                error(f"LinkedIn Scrape Error for query '{query}': {e}")
+                error(f"LinkedIn Scrape Error for query '{query_obj}': {e}")
                 return []
 
     def _get_highlights(self, highlights: list[dict]) -> list[dict]:
-        if highlights:
-            return {
-                highlight["title"]: highlight["items", []]
-                for highlight in highlights
-                if "title" in highlight
-            }
-        return {}
+        return {
+            highlight.get("title"): highlight.get("items", [])
+            for highlight in highlights
+            if isinstance(highlight, dict) and "title" in highlight
+        }
 
     def _get_best_apply_link(self, apply_options: list[dict]) -> str:
         """Prioritizes LinkedIn, Indeed, and Reed in that order.
@@ -132,7 +139,7 @@ class JobScraperService:
         apply_opts = item.get("apply_options", [])
         url = self._get_best_apply_link(apply_opts)
         highlights = self._get_highlights(item.get("highlights", {}))
-
+        print
         return RawJobMatch(
             title=item.get("title", "Unknown Title"),
             company_name=item.get("company_name", "Unknown Company"),
@@ -147,30 +154,31 @@ class JobScraperService:
         )
 
     def _map_linkedin_to_schema(self, item: Dict[str, Any]) -> RawJobMatch:
-        """Standardizes LinkedIn API results into our RawJobMatch schema."""
-        sal_raw = item.get("salary_raw", {})
-        val = sal_raw.get("value", {})
-
+        """Standardizes LinkedIn API results with robust None-handling."""
+        sal_raw = item.get("salary_raw") or {}
+        val = sal_raw.get("value") or {}
         contract = False
         schedule = "Unknown"
-
-        for employment_type in item.get("employment_type", []):
-            e_type = employment_type.upper()
+        
+        emp_types = item.get("employment_type") or []
+        if isinstance(emp_types, str): 
+            emp_types = [emp_types]
+        for et in emp_types:
+            e_type = str(et).upper()
             if "CONTRACT" in e_type:
                 contract = True
             if "FULL" in e_type:
                 schedule = "Full-Time"
-            if "PART" in e_type:
+            elif "PART" in e_type:
                 schedule = "Part-Time"
-            if "INTERN" in e_type:
+            elif "INTERN" in e_type:
                 schedule = "Internship"
 
-        contract = any(
-            re.match(r".+contract.+", e_type)
-            for e_type in item.get("employment_type", "").lower()
-        )
+        if not contract:
+            contract = any("contract" in str(et).lower() for et in emp_types)
 
-        title_lower = item.get("title", "").lower()
+        title_lower = (item.get("title") or "").lower()
+        
         setting = WorkSetting.UNKNOWN
         if item.get("remote_derived") or "remote" in title_lower:
             setting = WorkSetting.REMOTE
@@ -182,32 +190,28 @@ class JobScraperService:
         raw_seniority = item.get("seniority")
         try:
             seniority = SeniorityLevel(raw_seniority) if raw_seniority else SeniorityLevel.NOT_SPECIFIED
-        except ValueError:
+        except (ValueError, TypeError):
             seniority = SeniorityLevel.NOT_SPECIFIED
 
+        locations = item.get("locations_derived") or ["Unknown"]
+        primary_location = locations[0] if locations else "Unknown"
+
         return RawJobMatch(
-            title=item.get("title", "Unknown"),
-            company_name=item.get("organization", "Unknown"),
-            location=item.get("locations_derived", ["Unknown"])[0],
-            job_url=item.get("url", ""),
+            title=item.get("title") or "Unknown",
+            company_name=item.get("organization") or "Unknown",
+            location=primary_location,
+            job_url=item.get("url") or "",
             salary_min=val.get("minValue"),
             salary_max=val.get("maxValue"),
             work_setting=setting,
-            description=item.get("description_text", ""),
-            posted_at=item.get("date_posted", ""),
-            qualifications=item.get("linkedin_org_specialties", []),
+            description=item.get("description_text") or item.get("linkedin_org_description") or item.get("organization_description") or "No description provided.",
+            posted_at=item.get("date_posted") or "",
+            qualifications=item.get("linkedin_org_specialties") or [],
             seniority_level=seniority,
             is_contract=contract,
             schedule_type=schedule,
-            
         )
 
-    def _process_and_deduplicate(self, nested_results: List[Any]) -> RawJobMatchList:
-        """Flattens results, handles potential errors from gather, and deduplicates by URL."""
-        flat_list = []
-        for res in nested_results:
-            if isinstance(res, list):
-                flat_list.extend(res)
-
+    def _process_and_deduplicate(self, flat_list: List[RawJobMatch]) -> RawJobMatchList:
         unique_jobs = {j.job_url: j for j in flat_list if j.job_url}
         return RawJobMatchList(jobs=list(unique_jobs.values()))

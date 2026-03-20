@@ -56,7 +56,7 @@ async def cv_parser_node(state: AgentState, config: RunnableConfig) -> Dict[str,
     active_id = state.get("active_profile_id") or cfg.get("active_profile_id")
 
     if active_id:
-        log_message(f"Using existing profile: {active_id}")
+        log_message(f"CACHE HIT: Using existing profile")
         profile = storage.fetch_candidate_profile(active_id)
         return {"cv_data": profile, "active_profile_id": active_id}
 

@@ -5,6 +5,8 @@ import hashlib
 from typing import List
 from rapidfuzz import fuzz
 
+from src.schema import SearchStep
+
 
 def generate_safe_id(input_string: str) -> str:
     """Creates a deterministic, ASCII-only MD5 hash of any string (URL, Title, etc)."""
@@ -26,13 +28,34 @@ def sanitize_query(q: str) -> str:
     return re.sub(r"\s+", " ", q)
 
 
-def filter_redundant_queries(queries: List[str], threshold: int = 85) -> List[str]:
-    """Filters out queries that are semantically too similar via fuzzy matching."""
-    unique = []
-    for q in queries:
-        if not any(fuzz.token_sort_ratio(q, u) >= threshold for u in unique):
-            unique.append(q)
-    return unique
+
+
+def filter_redundant_queries(plan: List[SearchStep], threshold: int = 80) -> List[SearchStep]:
+    """
+    Deduplicates SearchStep objects using fuzzy string matching on title clusters.
+    """
+    unique_queries = []
+    
+    for query_obj in plan:
+        current_titles = " ".join(sorted([t.lower().strip() for t in query_obj.title_stems]))
+        
+        if not current_titles:
+            continue
+
+        is_redundant = False
+        for seen_query in unique_queries:
+            seen_titles = " ".join(sorted([t.lower().strip() for t in seen_query.title_stems]))
+            
+            score = fuzz.token_sort_ratio(current_titles, seen_titles)
+            
+            if score >= threshold:
+                is_redundant = True
+                break
+        
+        if not is_redundant:
+            unique_queries.append(query_obj)
+            
+    return unique_queries
 
 
 def extract_base_locations(location_str: str) -> list[str]:

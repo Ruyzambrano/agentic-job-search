@@ -126,21 +126,58 @@ class AnalysedJobMatchListWithMeta(BaseModel):
 
 
 class CandidateProfile(BaseModel):
-    full_name: str
-    job_titles: List[str]
-    key_skills: List[str]
-    years_of_experience: int = Field(ge=0)
-    current_location: Optional[str] = None
-    seniority_level: SeniorityLevel = SeniorityLevel.NOT_SPECIFIED
-    summary: str
-    industries: List[str]
-    work_preference: WorkSetting = WorkSetting.UNKNOWN
+    model_config = ConfigDict(
+        use_enum_values=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True
+    )
+    full_name: str = Field(..., description="The candidate's legal name")
+    job_titles: List[str] = Field(
+        default_factory=list, 
+        description="List of roles the candidate has held or is targeting"
+    )
+    key_skills: List[str] = Field(
+        default_factory=list, 
+        description="Core technical and soft skills"
+    )
+    years_of_experience: int = Field(
+        0, ge=0, 
+        description="Total years of professional experience"
+    )
+    current_location: Optional[str] = Field(
+        None, 
+        description="City and country of residence"
+    )
+    seniority_level: SeniorityLevel = Field(
+        default=SeniorityLevel.NOT_SPECIFIED,
+        description="Target seniority level (e.g., Mid-Senior, Lead)"
+    )
+    summary: str = Field(
+        "A summary of the candidate's profile",
+        description="Professional biography or executive summary"
+    )
+    industries: List[str] = Field(
+        default_factory=list, 
+        description="Sectors the candidate has worked in (e.g., Fintech, E-commerce)"
+    )
+    work_preference: WorkSetting = Field(
+        default=WorkSetting.UNKNOWN,
+        description="Preference for Remote, Hybrid, or On-site"
+    )
 
+class SearchStep(BaseModel):
+    title_stems: List[str] = Field(
+        description="The root/stem of the job titles to maximize matches."
+    )
+    must_have_skills: List[str] = Field(
+        description="The 1-2 non-negotiable tools or skills for this segment."
+    )
+    reasoning: str = Field(
+        description="Think step-by-step about the talent segment you are targeting here."
+    )
 
 class SearchQueryPlan(BaseModel):
-    queries: list[str] = Field(
-        description="A list of 5-10 optimized Google Jobs search strings"
-    )
+    steps: List[SearchStep] = Field(description="3-4 distinct search strategies.")
 
 
 class AgentWeights(BaseModel):
@@ -195,3 +232,22 @@ class PipelineSettings(BaseModel):
     weights: AgentWeights = Field(default_factory=AgentWeights)
     scraper_settings: ScraperSettings = Field(default_factory=ScraperSettings)
     api_settings: ApiSettings = Field(default_factory=ApiSettings)
+
+
+class LocationData(BaseModel):
+    """SOP: A universal location container for all job APIs."""
+    city: str      
+    state_full: Optional[str] 
+    country_full: str     
+    country_code: str   
+    
+    @property
+    def linkedin_string(self) -> str:
+        """Full hierarchy: 'London, England, United Kingdom'"""
+        parts = [self.city, self.state_full, self.country_full]
+        return ", ".join([p for p in parts if p])
+
+    @property
+    def google_string(self) -> str:
+        """City level as per SerpApi docs: 'London'"""
+        return self.city

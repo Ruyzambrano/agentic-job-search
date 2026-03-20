@@ -6,7 +6,7 @@ from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
 
 from src.utils.text_processing import extract_base_locations
-from src.utils.local_storage import get_local_storage, set_new_key
+from src.utils.local_storage import get_local_storage, set_new_key, save_provider_config
 from src.ui.streamlit_cache import get_cv_text
 from src.ui.controllers import handle_profile_deletion, set_models_for_pipeline
 from src.utils.func import (
@@ -57,7 +57,7 @@ def display_job_match(job: AnalysedJobMatchWithMeta):
             if job.is_contract:
                 meta_labels.append(":red[Contract]")
             if job.seniority_level != "Not specified":
-                meta_labels.append(f"_{job.seniority_level}_")
+                meta_labels.append(f"_{job.seniority_level.value}_")
 
             if meta_labels:
                 st.markdown(" · ".join(meta_labels))
@@ -633,3 +633,4 @@ def display_profile_management(storage, active_profile):
             ):
                 if handle_profile_deletion(storage, active_profile["profile_id"]):
                     st.rerun()
+

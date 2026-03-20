@@ -33,7 +33,7 @@ def validate_configuration(setting, error_message):
         if st.button("Go to Settings"):
             st.switch_page(
                 "pages/7_settings.py"
-            )  # Updated to match your folder structure
+            )
         st.stop()
 
 
@@ -47,8 +47,6 @@ def log_message(message: str):
         except:
             pass
 
-
-# --- Visualization (CLI/Terminal) ---
 
 
 def pretty_print_jobs_with_rich(json_data: Any):

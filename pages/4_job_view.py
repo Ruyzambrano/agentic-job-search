@@ -18,7 +18,7 @@ def show_specific_job():
         st.info("Upload a CV to find more jobs")
         st.stop()
     
-    jobs = [AnalysedJobMatchWithMeta(**j) for j in jobs]
+    jobs = [AnalysedJobMatchWithMeta(**loads(j)) for j in jobs]
     sort_by = st.sidebar.selectbox(
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )

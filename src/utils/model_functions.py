@@ -93,17 +93,14 @@ def is_valid_model(model) -> bool:
     return "gemini" in model_name
 
 
-def get_llm_model(api_settings, role: str):
+def get_llm_model(api_settings, model_id: str, provider: str):
     """
     Factory: Returns the specific LangChain Chat object for a pipeline role.
     Roles: 'reader', 'writer', 'researcher'
     """
-    provider = api_settings.ai_provider.lower()
-    model_id = getattr(api_settings, f"{provider}_{role}", None)
-
     if provider == "gemini":
         return ChatGoogleGenerativeAI(
-            model=model_id or "gemini-3-flash",
+            model=model_id or "gemini-3-flash-preview",
             api_key=api_settings.gemini_api_key,
             temperature=0.1,
             max_retries=3,
@@ -126,6 +123,6 @@ def get_llm_model(api_settings, role: str):
     raise ProviderError(f"Provider '{provider}' is not configured or supported.")
 
 
-def get_gemini_embedding_model(api_key: str, model_id: str = "text-embedding-004"):
+def get_gemini_embedding_model(model_id: str, api_key: str):
     """Returns the embedding engine used by the StorageService."""
     return GoogleGenerativeAIEmbeddings(model=model_id, api_key=api_key)

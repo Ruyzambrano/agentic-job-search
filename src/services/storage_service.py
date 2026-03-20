@@ -6,11 +6,12 @@ from typing import List, Optional, Any
 import streamlit as st
 
 from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone
+
 from src.schema import (
     CandidateProfile,
     AnalysedJobMatchWithMeta,
     RawJobMatch,
-    RawJobMatchList,
 )
 from src.utils.text_processing import generate_safe_id, clean_text_for_embedding
 
@@ -19,14 +20,17 @@ class StorageService:
     def __init__(self, index_name: str, embeddings: Any):
         """
         Initializes the service.
-        Note: Ensure your embeddings model is configured for 3072 dimensions
-        to match your Pinecone index.
         """
         self.index_name = index_name
         self.embeddings = embeddings
         self.NS_USER_DATA = "user_job_analyses"
         self.NS_GLOBAL_JOBS = "global_raw_jobs"
         self.NS_ANALYSES = "user_job_analyses"
+        self.pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+        try: 
+            self.pc.list_indexes()
+        except Exception as e:
+            raise ConnectionError(f"Pinecone authentication error: {str(e)}")
 
     def _get_store(self, namespace: str) -> PineconeVectorStore:
         """Internal helper to create a LangChain Pinecone store instance."""
@@ -174,15 +178,21 @@ class StorageService:
         return hits, misses
 
     def sync_global_library(
-        self, raw_results: RawJobMatchList, ttl_days: int = 7
-    ) -> List[RawJobMatch]:
+    self, raw_results: Any, ttl_days: int = 7) -> List[Any]:
         """Syncs scraped jobs to a global library to avoid redundant processing."""
+        if not raw_results or not hasattr(raw_results, "jobs") or not raw_results.jobs:
+            return []
+
         store = self._get_store(self.NS_GLOBAL_JOBS)
         index = store.get_pinecone_index(self.index_name)
         final_jobs, to_upsert = [], []
 
-        job_map = {generate_safe_id(j.job_url): j for j in raw_results.jobs}
-        response = index.fetch(ids=list(job_map.keys()), namespace=self.NS_GLOBAL_JOBS)
+        job_map = {generate_safe_id(j.job_url): j for j in raw_results.jobs if getattr(j, "job_url", None)}
+        if not job_map:
+            return []
+        
+        ids_to_fetch = list(job_map.keys())
+        response = index.fetch(ids=ids_to_fetch, namespace=self.NS_GLOBAL_JOBS)
         vectors = response.vectors if response else {}
 
         for uid, job in job_map.items():
@@ -209,7 +219,10 @@ class StorageService:
                 metadatas=[x["metadata"] for x in to_upsert],
                 ids=[x["id"] for x in to_upsert],
             )
-        return final_jobs
+        return [
+            RawJobMatch(**j) if isinstance(j, dict) else j 
+            for j in final_jobs
+        ]
 
     def _is_expired(self, meta: dict, ttl: int) -> bool:
         last = meta.get("last_synced_at")
@@ -394,7 +407,7 @@ class StorageService:
             for field in ["job_titles", "key_skills", "industries"]:
                 if isinstance(meta.get(field), str):
                     try:
-                        meta[field] = json.loads(meta[field])
+                        meta[field] = loads(meta[field])
                     except:
                         meta[field] = []
             profiles.append(meta)

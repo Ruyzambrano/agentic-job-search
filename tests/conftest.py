@@ -12,7 +12,9 @@ from src.schema import (
     PipelineSettings,
     ApiSettings,
     AgentWeights,
-    SearchQueryPlan
+    SearchQueryPlan,
+    SearchStep,
+    LocationData
 )
 from src.services.job_scraper import JobScraperService
 
@@ -38,8 +40,10 @@ def mock_settings():
 @pytest.fixture
 def mock_search_query_plan():
     return SearchQueryPlan(
-        queries=["Data Engineer", "Python Developer"]
-    )
+        steps=[SearchStep(title_stems=["Data Engin"], 
+                         must_have_skills=["Python"], 
+                         reasoning="Because")
+        ])
 
 @pytest.fixture(autouse=True)
 def silent_embeddings():
@@ -155,3 +159,12 @@ def mock_agent():
 
     agent.ainvoke = AsyncMock(return_value={"structured_response": MagicMock()})
     return agent
+
+@pytest.fixture
+def mock_location_data():
+    return LocationData(
+        city="London",
+        state_full="Greater London",
+        country_code="gb",
+        country_full="United Kingdon"
+    )

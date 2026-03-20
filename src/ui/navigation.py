@@ -35,7 +35,6 @@ def sidebar_handler():
             except Exception as e:
                 st.error(f"Failed to convert CV: {e}")
 
-        st.divider()
         return new_cv
 
 

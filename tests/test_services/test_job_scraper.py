@@ -41,8 +41,7 @@ def test_map_linkedin_to_schema_work_setting(scraper_service):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_run_research_google_success(scraper_service):
-    # Mock SerpAPI
+async def test_run_research_google_success(scraper_service, mock_search_query_plan, mock_location_data):
     mock_data = {
         "jobs_results": [
             {"title": "DevOps", "company_name": "CloudCo", "apply_options": [{"link": "url1"}]}
@@ -55,7 +54,7 @@ async def test_run_research_google_success(scraper_service):
     scraper_service.api_cfg.use_google = True
     scraper_service.api_cfg.use_linkedin = False
 
-    result = await scraper_service.run_research(["Python"], "London")
+    result = await scraper_service.run_research(mock_search_query_plan.steps, mock_location_data)
 
     assert isinstance(result, RawJobMatchList)
     assert len(result.jobs) == 1
@@ -72,11 +71,10 @@ async def test_run_research_no_scrapers_enabled(scraper_service):
 
 
 def test_process_and_deduplicate(scraper_service):
-    # Create two jobs with the same URL
     job1 = RawJobMatch(title="Job 1", job_url="https://same.com", company_name="A", location="L")
     job2 = RawJobMatch(title="Job 2", job_url="https://same.com", company_name="B", location="L")
     
-    input_data = [[job1], [job2]]
+    input_data = [job1, job2]
     
     result = scraper_service._process_and_deduplicate(input_data)
     assert len(result.jobs) == 1

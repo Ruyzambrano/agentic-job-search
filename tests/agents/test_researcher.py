@@ -12,7 +12,8 @@ async def test_researcher_node_success(
     mock_search_query_plan,
     mock_storage_service,
     mock_raw_job,
-    mock_settings
+    mock_settings,
+    mock_location_data
 ):
     mock_scraper = MagicMock()
     mock_scraper.run_research = AsyncMock(return_value=RawJobMatchList(jobs=[mock_raw_job]))
@@ -22,7 +23,9 @@ async def test_researcher_node_success(
         "job_scraper": mock_scraper,
         "researcher_agent": mock_agent,
         "pipeline_settings": mock_settings,
-        "user_id": "user_123"
+        "user_id": "user_123",
+        "location": mock_location_data,
+        "role": "Wizard"
     }
     mock_state["active_profile_id"] = "test"
     mock_agent.ainvoke = AsyncMock(return_value={"structured_response": mock_search_query_plan})
@@ -40,7 +43,8 @@ async def test_researcher_node_no_queries_found(
     mock_state, 
     mock_config, 
     mock_storage_service,
-    mock_settings
+    mock_settings,
+    mock_location_data
 ):
     """
     If the LLM fails to generate queries, the node should exit gracefully.
@@ -49,10 +53,11 @@ async def test_researcher_node_no_queries_found(
         "storage_service": mock_storage_service,
         "researcher_agent": mock_agent,
         "pipeline_settings": mock_settings,
-        "user_id": "user_123"
+        "user_id": "user_123",
+        "location": mock_location_data
     }
     mock_state["active_profile_id"] = "test"
-    empty_plan = SearchQueryPlan(queries=[])
+    empty_plan = SearchQueryPlan(steps=[])
     mock_agent.ainvoke = AsyncMock(
         return_value={"structured_response": empty_plan}
     )

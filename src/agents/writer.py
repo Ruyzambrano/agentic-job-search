@@ -12,10 +12,12 @@ from src.schema import (
     AnalysedJobMatchListWithMeta,
     AnalysedJobMatchList,
     RawJobMatchList,
+    AnalysedJobMatchWithMeta
 )
 from src.state import AgentState
 from src.services.storage_service import StorageService
 from src.utils.func import log_message
+from src.utils.text_processing import generate_safe_id
 
 
 def create_writer_agent(writer_llm, free_tier: bool = False):
@@ -30,18 +32,22 @@ def create_writer_agent(writer_llm, free_tier: bool = False):
 
 ### ANALYSIS CRITERIA
 For every job, provide:
-- The "Why": Specific evidence from the profile that matches the job requirements.
-- The "Gap": Explicitly list missing technologies, industry experience, or seniority mismatches. If a skill isn't in the profile, assume they DON'T have it.
-- Match Score: 
-    * 85-100%: Perfect tech stack match, correct seniority, industry alignment.
-    * 60-84%: Strong match but missing 1-2 secondary tools or slightly different industry background.
-    * 0-59%: Missing core "Must-Have" tech stack or significant seniority mismatch.
+- job_summary: A 2-3 sentence value proposition of the role.
+- attributes: List of key traits (e.g., 'Remote', 'Senior', 'Permanent').
+- top_applicant_score: A conservative 0-100 score.
+- top_applicant_reasoning: A high-fidelity "Gap Analysis". List specific evidence of matches AND explicitly list missing technologies or seniority mismatches (The "Gap").
 
 ### OUTPUT RULES
 - Use the 'AnalysedJobMatchList' format.
 - Tone: Clinical, objective, and realistic. 
 - Stop being encouraging. Be accurate. If a candidate is a bad fit, say so and provide a low score.
-- Ensure the 'job_url' in your output matches the input EXACTLY."""
+- Ensure the 'job_url' in your output matches the input EXACTLY.
+
+### FINAL JSON SAFETY CHECK
+- You are producing NATIVE JSON. 
+- If a job description contains double quotes, you MUST use single quotes in your 'Why' and 'Gap' fields.
+- Example: Instead of "He said "Hello"", use "He said 'Hello'".
+- NO NEWLINES: Everything for one job must be on a single line in the JSON string."""
     if free_tier:
         writer_llm.rate_limiter = InMemoryRateLimiter(
             requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
@@ -83,11 +89,12 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
 
     if not jobs_to_process:
         log_message("🚀 All jobs retrieved from cache.")
-        return {"writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses)}
+        final_analyses_meta = [AnalysedJobMatchWithMeta(**j.model_dump()) for j in final_analyses]
+        return {"writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses_meta)}
 
     max_concurrency = 1 if settings.api_settings.free_tier else 3
     semaphore = asyncio.Semaphore(max_concurrency)
-    chunk_size = 5
+    chunk_size = 3
     chunks = [
         jobs_to_process[i : i + chunk_size]
         for i in range(0, len(jobs_to_process), chunk_size)
@@ -103,11 +110,14 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     batch_results = await asyncio.gather(*tasks)
 
     new_llm_results = [job for sublist in batch_results for job in sublist]
+    
+    loc_obj = cfg.get("location")
+    target_loc_str = loc_obj.city if hasattr(loc_obj, "city") else str(loc_obj or "")
 
     enriched_results = [
         job.model_copy(update={
             "target_role": cfg.get("role"),
-            "target_location": cfg.get("location"),
+            "target_location": target_loc_str,
         })
         for job in new_llm_results
     ]
@@ -115,29 +125,42 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     storage.save_job_analyses(enriched_results, cfg.get("user_id"), profile_id)
     final_analyses.extend(enriched_results)
 
-    log_message(f"Analysis complete! {len(enriched_results)} new audits saved.")
+    final_analyses_meta = [
+        AnalysedJobMatchWithMeta(**job.model_dump()) 
+        if not isinstance(job, AnalysedJobMatchWithMeta) else job
+        for job in final_analyses
+    ]
 
     return {
-        "writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses),
-        "messages": [HumanMessage(content=f"Audited {len(final_analyses)} roles.")],
-    }
+    "writer_data": AnalysedJobMatchListWithMeta(
+        jobs=[j.model_dump() if hasattr(j, "model_dump") else j for j in final_analyses_meta]
+    ).model_dump(),
+    "messages": [HumanMessage(content=f"Audited {len(final_analyses_meta)} roles.")],
+}
 
 
 async def _analyze_chunk(chunk, agent, state, semaphore, settings) -> List[Any]:
     """Handles the actual LLM call for a subset of jobs."""
-    weights = settings.weights
+    w = settings.weights
     async with semaphore:
-        context = "\n".join([f"JOB: {j.model_dump_json()}" for j in chunk])
+        context = "\n".join([
+            f"ID: {generate_safe_id(j.job_url)} | TITLE: {j.title} | DESC: {j.description[:1500]}" 
+            for j in chunk
+        ])
+        
         prompt = (
-            f"AUDIT PRIORITIES: Skills={weights.key_skills}, Exp={weights.experience}\n"
+            f"--- AUDIT WEIGHTS ---\n"
+            f"Experience Strictness: {w.experience}/100\n"
+            f"Location Strictness: {w.location}/100\n"
+            f"Retention Risk Strategy: {'Prioritize Growth' if w.retention_risk else 'Lateral Match'}\n"
+            f"----------------------\n"
             f"Analyze these {len(chunk)} jobs:\n{context}"
         )
 
-        response = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-
-        structured_data = response.get("structured_response")
-
-        if settings.api_settings.free_tier:
-            await asyncio.sleep(2.0)
-
-        return structured_data.jobs if structured_data else []
+        try:
+            response = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
+            structured_data = response.get("structured_response")
+            return structured_data.jobs if structured_data else []
+        except Exception as e:
+            log_message(f"⚠️ JSON Parsing Error in chunk: {str(e)[:100]}")
+            return []

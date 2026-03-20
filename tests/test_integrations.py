@@ -47,18 +47,18 @@ async def test_full_graph_execution(
     mock_agent, 
     mock_raw_job, 
     mock_candidate_profile,
-    mock_analysed_job
+    mock_analysed_job,
+    mock_location_data,
+    mock_search_query_plan
 ):
     """
     INTEGRATION: Run the entire LangGraph with real service logic 
     but mocked external infrastructure.
     """
-    # 1. Setup Pinecone Index Mock
     _, index = mock_pinecone
     index.fetch.side_effect = fetch_profile_side_effect
     index.query.return_value = {"matches": []}
     
-    # 2. Setup Real Services
     mock_emb = MagicMock()
     real_storage = StorageService(index_name="test-index", embeddings=mock_emb)
     
@@ -67,17 +67,14 @@ async def test_full_graph_execution(
     real_storage._get_store = MagicMock(return_value=mock_store)
     
     real_scraper = JobScraperService(mock_settings)
-    # Ensure the scraper returns a job so the ID list isn't empty in sync_global_library
     real_scraper.run_research = AsyncMock(return_value=RawJobMatchList(jobs=[mock_raw_job]))
 
-    # 3. Setup Agent side_effects
     mock_agent.ainvoke.side_effect = [
         {"structured_response": mock_candidate_profile}, 
-        {"structured_response": SearchQueryPlan(queries=["Python Developer"])}, 
+        {"structured_response": mock_search_query_plan}, 
         {"structured_response": AnalysedJobMatchList(jobs=[mock_analysed_job])} 
     ]
 
-    # 4. State & Config
     initial_state = {
         "cv_raw_text": "Experienced Python Dev",
         "messages": []
@@ -91,16 +88,16 @@ async def test_full_graph_execution(
             "cv_parser_agent": mock_agent,
             "researcher_agent": mock_agent,
             "writer_agent": mock_agent,
-            "pipeline_settings": mock_settings
+            "pipeline_settings": mock_settings,
+            "location": mock_location_data
         }
     }
 
     app = create_workflow()
     final_state = await app.ainvoke(initial_state, config=config)
 
-    # 6. Final Assertions
     assert "cv_data" in final_state
     assert "research_data" in final_state
     assert "writer_data" in final_state
     
-    assert len(final_state["writer_data"].jobs) > 0
+    assert len(final_state["writer_data"]) > 0

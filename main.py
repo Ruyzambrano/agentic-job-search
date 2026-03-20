@@ -7,7 +7,6 @@ from src.graph import create_workflow
 from src.agents.cv_parser import create_cv_parser_agent
 from src.agents.researcher import create_researcher_agent
 from src.agents.writer import create_writer_agent
-from src.services.storage_service import StorageService
 from src.utils.func import log_message
 
 
@@ -15,13 +14,7 @@ async def run_job_matcher(raw_context: str, config: dict, models: dict) -> dict:
     """
     Controller function called by streamlit_utils.process_new_cv.
     """
-    storage = StorageService(
-        index_name=config["configurable"][
-            "pipeline_settings"
-        ].api_settings.pinecone_index,
-        embeddings=models["embeddings"],
-    )
-
+    storage = config["configurable"].get("storage_service")
     agents = {
         "cv_parser_agent": create_cv_parser_agent(models["reader"]),
         "researcher_agent": create_researcher_agent(models["researcher"]),

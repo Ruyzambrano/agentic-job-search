@@ -10,6 +10,26 @@ from src.core.embeddings_handler import validate_and_get_models, get_embeddings
 from src.utils.func import get_provider_config, get_model_roles, ModelTypeError
 from src.utils.model_functions import get_gemini_text_models, get_model_index
 
+def show_success_toast():
+    if st.session_state.get("changed_api_key"):
+        st.toast("Changed AI API Key", icon=":material/api:")
+        st.session_state.changed_api_key = False
+    if st.session_state.get("changed_provider"):
+        st.toast("Changed AI Provider", icon=":material/smart_toy:")
+        st.session_state.changed_provider = False
+    if st.session_state.get("changed_serpapi"):
+        st.toast("Changed SerpAPI API Key", icon=":material/work_alert:")
+        st.session_state.changed_serpapi = False
+    if st.session_state.get("updated_models"):
+        st.toast("Updated Model Configuration", icon=":material/model_training:")
+        st.session_state.updated_models = False
+    if st.session_state.get("updated_setting"):
+        st.toast("Settings Updated", icon=":material/exercise:")
+        st.session_state.updated_setting = False
+
+    if st.session_state.get("reset_settings"):
+        st.toast("Settings Reset", icon=":material/refresh:")
+        st.session_state.reset_settings = False
 
 def init_app():
     """
@@ -42,6 +62,8 @@ def init_app():
 
     if "last_updated" not in st.session_state:
         st.session_state.last_updated = 0.0
+
+    show_success_toast()
 
     
 
