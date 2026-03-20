@@ -122,6 +122,17 @@ def mock_pinecone():
     
     return store, index
 
+@pytest.fixture(autouse=True)
+def mock_pinecone_client():
+    """
+    SOP: Prevents StorageService from ever making a real 
+    network call to Pinecone during tests.
+    """
+    with patch("src.services.storage_service.Pinecone") as mocked_pc:
+        instance = mocked_pc.return_value
+        instance.list_indexes.return_value = []
+        yield instance
+
 @pytest.fixture
 def mock_config():
     return {
