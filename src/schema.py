@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-
+from typing import Optional, List, Any
+from pydantic import BaseModel, Field, field_validator, ConfigDict, computed_field, model_validator
+import hashlib
 
 class WorkSetting(str, Enum):
     REMOTE = "Remote"
@@ -52,6 +52,24 @@ class JobBase(BaseModel):
         default=WorkSetting.UNKNOWN, description="Remote/Hybrid/On Site"
     )
     schedule_type: str = "Unknown"
+
+    @computed_field
+    def id(self) -> str:
+        """Deterministic ID based on URL."""
+        if not self.job_url:
+            return "unknown_id"
+        return hashlib.md5(str(self.job_url).encode("utf-8")).hexdigest()
+    
+    @model_validator(mode='before')
+    @classmethod
+    def migrate_legacy_ids(cls, data: Any) -> Any:
+        """Injects a hashed ID if one is missing from the database metadata."""
+        if isinstance(data, dict):
+            if not data.get("id"):
+                url = data.get("job_url")
+                if url:
+                    data["id"] = generate_safe_id(str(url))
+        return data
 
 
 class RawJobMatch(JobBase):
@@ -251,3 +269,10 @@ class LocationData(BaseModel):
     def google_string(self) -> str:
         """City level as per SerpApi docs: 'London'"""
         return self.city
+    
+
+def generate_safe_id(input_string: str) -> str:
+    """SOP: Helper to keep hashing logic consistent."""
+    if not input_string:
+        return "unknown_id"
+    return hashlib.md5(input_string.encode("utf-8")).hexdigest()

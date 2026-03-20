@@ -12,8 +12,9 @@ from src.schema import (
     CandidateProfile,
     AnalysedJobMatchWithMeta,
     RawJobMatch,
+    generate_safe_id
 )
-from src.utils.text_processing import generate_safe_id, clean_text_for_embedding
+from src.utils.text_processing import clean_text_for_embedding
 
 
 class StorageService:
@@ -216,8 +217,13 @@ class StorageService:
         if to_upsert:
             store.add_texts(
                 texts=[x["text"] for x in to_upsert],
-                metadatas=[x["metadata"] for x in to_upsert],
                 ids=[x["id"] for x in to_upsert],
+                metadatas=[
+                    {
+                        **x["metadata"], 
+                        "job_url": x["metadata"].get("job_url")
+                    } for x in to_upsert
+                ],
             )
         return [
             RawJobMatch(**j) if isinstance(j, dict) else j 
@@ -233,12 +239,17 @@ class StorageService:
         )
 
     def _prepare_job_meta(self, job: RawJobMatch) -> dict:
-        d = job.model_dump()
+        d = job.model_dump(mode='json') 
+        
+        d["id"] = job.id
+        d["created_at_ts"] = int(datetime.now(timezone.utc).timestamp())
+        
         for k, v in d.items():
             if v is None:
                 d[k] = 0 if "salary" in k else ""
-            if isinstance(v, list):
-                d[k] = [str(i) for i in v]
+            if isinstance(v, (list, dict)):
+                d[k] = dumps(v)
+        
         d["last_synced_at"] = datetime.now(timezone.utc).isoformat()
         return d
 
@@ -251,6 +262,7 @@ class StorageService:
                     metadata[field] = loads(value)
                 except:
                     metadata[field] = []
+        metadata.pop("id", None)
         return RawJobMatch(**metadata)
 
     def find_job_matches_for_profile(
@@ -343,12 +355,20 @@ class StorageService:
 
     def find_raw_job_by_url(self, job_url: str) -> Optional[RawJobMatch]:
         """
-        SOP: Retrieves the original raw job data from the global namespace.
+        Retrieves the original raw job data from the global namespace.
         Uses the job_url as the filter.
         """
         try:
-            store = self._get_store(self.NS_USER_DATA)
+            job_id = generate_safe_id(job_url)
+            
+            store = self._get_store(self.NS_GLOBAL_JOBS)
             index = store.get_pinecone_index(self.index_name)
+            
+            response = index.fetch(ids=[job_id], namespace=self.NS_GLOBAL_JOBS)
+            
+            if response and job_id in response.vectors:
+                return self._parse_cached_job(response.vectors[job_id].metadata)
+
             results = index.query(
                 vector=[0.0] * 3072,
                 filter={"job_url": {"$eq": job_url}},
@@ -357,19 +377,17 @@ class StorageService:
                 include_metadata=True,
             )
 
-            matches = results.get("matches", [])
-            if not matches:
-                return None
-
-            meta = matches[0].get("metadata", {})
-            return RawJobMatch(**meta)
+            if getattr(results, "matches"):
+                return self._parse_cached_job(results["matches"][0]["metadata"])
+            
+            return None
 
         except Exception as e:
-            print(f"Error fetching raw job: {e}")
+            st.error(f"Error fetching raw job: {e}")
             return None
 
     def get_all_global_jobs(self, limit: int = 100) -> List[RawJobMatch]:
-        """Fetches the most recent raw jobs from the global namespace."""
+        """Retrieves raw job data using the hashed ID (O(1) lookup)."""
         try:
             store = self._get_store(self.NS_USER_DATA)
             index = store.get_pinecone_index(self.index_name)
@@ -421,3 +439,25 @@ class StorageService:
         jobs = [m["metadata"] for m in job_results.get("matches", [])]
 
         return profiles, jobs
+    
+    def cleanup_stale_jobs(self, months_old: int = 6):
+        """
+        SOP: Purges jobs older than X months from the global library.
+        Requires 'created_at_ts' metadata field to be present.
+        """
+        try:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=months_old * 30)
+            cutoff_ts = int(cutoff_date.timestamp())
+
+            index = self._get_store(self.NS_GLOBAL_JOBS).get_pinecone_index(self.index_name)
+
+            delete_response = index.delete(
+                filter={"created_at_ts": {"$lt": cutoff_ts}},
+                namespace=self.NS_GLOBAL_JOBS
+            )
+            
+            st.success(f"Cleanup complete! Removed jobs older than {cutoff_date.date()}.")
+            return delete_response
+        except Exception as e:
+            st.error(f"Cleanup failed: {e}")
+            return None

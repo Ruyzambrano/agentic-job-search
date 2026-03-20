@@ -32,16 +32,14 @@ def show_specific_job():
             "👈 Select a job from the sidebar or Home page to see the full analysis."
         )
         st.stop()
-
     with st.spinner("Fetching original job details..."):
         raw_job = get_cached_raw_job(storage, current_job.job_url)
     try:
         raw_job = RawJobMatch(**loads(raw_job))
         display_full_job(raw_job, current_job)
     except Exception as e:
-        st.error(f"Display Error: {e}")
-        if st.button("Back to Home"):
-            st.switch_page("dashboard.py")
+        st.warning("There was an issue with the full job description, the external URL may not work")
+        display_full_job(raw_job, current_job)
 
 
 if __name__ == "__main__":
