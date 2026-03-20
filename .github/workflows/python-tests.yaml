@@ -13,16 +13,17 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "requirements.txt" 
+          cache-dependency-glob: "requirements.txt"
 
       - name: Set up Python
         run: uv python install 3.12
 
       - name: Install Dependencies
-        run: uv pip install --system -r requirements.txt
+        run: uv pip install -r requirements.txt
 
       - name: Run Tests
         env:
           PINECONE_API_KEY: "test-key"
           SERPAPI_API_KEY: "test-key"
-        run: pytest tests/
+
+        run: uv run pytest tests/
