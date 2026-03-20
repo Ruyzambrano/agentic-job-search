@@ -18,14 +18,19 @@ from src.schema import (
 )
 from src.services.job_scraper import JobScraperService
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_streamlit(monkeypatch):
     mock_session = {
         "messages": [],
         "storage_service": MagicMock(),
         "pipeline_settings": PipelineSettings()
     }
-    mock_secrets = {"PINECONE_NAME": "test-index", "PINECONE_API_KEY": "fake-key"}
+    mock_secrets = {
+        "PINECONE_API_KEY": "test-key-123",
+        "SERPAPI_API_KEY": "test-serp-123",
+        "GOOGLE_API_KEY": "test-google-123",
+        "GEMINI_API_KEY": "test-gemini"
+    }
     monkeypatch.setattr("streamlit.session_state", mock_session)
     monkeypatch.setattr("streamlit.secrets", mock_secrets)
     return mock_session, mock_secrets
@@ -116,6 +121,17 @@ def mock_pinecone():
     index.fetch.return_value = MagicMock(vectors={})
     
     return store, index
+
+@pytest.fixture(autouse=True)
+def mock_pinecone_client():
+    """
+    SOP: Prevents StorageService from ever making a real 
+    network call to Pinecone during tests.
+    """
+    with patch("src.services.storage_service.Pinecone") as mocked_pc:
+        instance = mocked_pc.return_value
+        instance.list_indexes.return_value = []
+        yield instance
 
 @pytest.fixture
 def mock_config():
