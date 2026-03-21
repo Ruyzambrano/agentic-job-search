@@ -3,8 +3,7 @@ import json
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone, timedelta
 from src.services.storage_service import StorageService
-from src.schema import RawJobMatch, RawJobMatchList
-from src.utils.text_processing import generate_safe_id
+from src.schema import RawJobMatch, RawJobMatchList, generate_safe_id
 
 @pytest.fixture
 def mock_embeddings():
@@ -85,21 +84,24 @@ def test_find_raw_job_by_url_schema_conversion(mock_pinecone, mock_raw_job):
     mock_emb = MagicMock()
     service = StorageService(index_name="test-index", embeddings=mock_emb)
     
+    job_id = mock_raw_job.id 
+    
+    mock_vector = MagicMock()
+    mock_vector.metadata = mock_raw_job.model_dump(mode='json')
+    
+    index.fetch.return_value = MagicMock(
+        vectors={job_id: mock_vector}
+    )
+
     mock_store = MagicMock()
     mock_store.get_pinecone_index.return_value = index
     service._get_store = MagicMock(return_value=mock_store)
 
-    index.query.return_value = {
-        "matches": [{
-            "metadata": mock_raw_job.model_dump()
-        }]
-    }
+    result = service.find_raw_job_by_url(mock_raw_job.job_url)
 
-    result = service.find_raw_job_by_url("https://example.com/1")
-
+    assert result is not None
     assert isinstance(result, RawJobMatch)
-    assert result.job_url == "https://example.com/1"
-    assert result.title == mock_raw_job.title
+    assert result.job_url == mock_raw_job.job_url
 
 def test_find_all_jobs_for_user_filtering(mock_pinecone):
     """

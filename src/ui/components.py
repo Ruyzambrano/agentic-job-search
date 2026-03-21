@@ -487,6 +487,7 @@ def vector_storage_setting_tab(storage: LocalStorage):
         if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
             st.success("App cache cleared.")
+    """TODO: If the user is me, clear out old jobs"""
 
 
 @st.fragment

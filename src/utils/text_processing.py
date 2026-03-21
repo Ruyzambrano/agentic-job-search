@@ -1,18 +1,9 @@
 """Generic String Manipulation"""
-
 import re
-import hashlib
 from typing import List
 from rapidfuzz import fuzz
 
 from src.schema import SearchStep
-
-
-def generate_safe_id(input_string: str) -> str:
-    """Creates a deterministic, ASCII-only MD5 hash of any string (URL, Title, etc)."""
-    if not input_string:
-        return "unknown_id"
-    return hashlib.md5(input_string.encode("utf-8")).hexdigest()
 
 
 def clean_text_for_embedding(text: str) -> str:

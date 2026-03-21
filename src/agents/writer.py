@@ -12,12 +12,12 @@ from src.schema import (
     AnalysedJobMatchListWithMeta,
     AnalysedJobMatchList,
     RawJobMatchList,
-    AnalysedJobMatchWithMeta
+    AnalysedJobMatchWithMeta,
+    generate_safe_id
 )
 from src.state import AgentState
 from src.services.storage_service import StorageService
 from src.utils.func import log_message
-from src.utils.text_processing import generate_safe_id
 
 
 def create_writer_agent(writer_llm, free_tier: bool = False):

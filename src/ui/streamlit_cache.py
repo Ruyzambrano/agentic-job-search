@@ -76,6 +76,10 @@ def get_cached_all_jobs_for_user(_storage: StorageService, user_id: str):
 def get_cached_raw_job(_storage: StorageService, job_url: str):
     """Cache the heavy raw job details to prevent re-fetching over the network."""
     raw_job = _storage.find_raw_job_by_url(job_url)
+    
+    if raw_job is None:
+        return None
+        
     return raw_job.model_dump_json()
 
 @st.cache_data(show_spinner=False, ttl=3600)
