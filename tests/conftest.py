@@ -103,10 +103,11 @@ def mock_candidate_profile():
     )
 
 @pytest.fixture
-def mock_state(mock_raw_job):
+def mock_state(mock_raw_job, mock_candidate_profile):
     return {
         "messages": [],
         "research_data": RawJobMatchList(jobs=[mock_raw_job]),
+        "cv_data": mock_candidate_profile
     }
 
 @pytest.fixture
@@ -182,5 +183,6 @@ def mock_location_data():
         city="London",
         state_full="Greater London",
         country_code="gb",
-        country_full="United Kingdon"
+        country_full="United Kingdon",
+        raw_input="London"
     )

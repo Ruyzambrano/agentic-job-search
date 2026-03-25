@@ -45,7 +45,8 @@ def log_message(message: str):
         try:
             st.write(message)
         except:
-            pass
+            ...
+    print(message)
 
 
 

@@ -23,7 +23,7 @@ class SeniorityLevel(str, Enum):
 
 class JobBase(BaseModel):
     """Shared fields for both Raw and Analysed jobs to maintain consistency."""
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
     title: str = Field(..., min_length=1)
     company: str = Field(..., alias="company_name")
     location: str = Field(description="The location of the role")
@@ -53,7 +53,7 @@ class JobBase(BaseModel):
     )
     schedule_type: str = "Unknown"
 
-    @computed_field
+    @computed_field(return_type=str)
     def id(self) -> str:
         """Deterministic ID based on URL."""
         if not self.job_url:
@@ -73,10 +73,7 @@ class JobBase(BaseModel):
 
 
 class RawJobMatch(JobBase):
-    salary_string: str = "Not specified"
-    raw_description: Optional[str] = Field(
-        default="", description="The full, unedited text"
-    )
+    salary_string: str = Field("Not specified", description="If the employer offers a non-numerical salary, e.g., 'competitive' or 'up to 80k a year'")
     posted_at: str = ""
 
 
@@ -146,7 +143,8 @@ class AnalysedJobMatchListWithMeta(BaseModel):
 class CandidateProfile(BaseModel):
     model_config = ConfigDict(
         use_enum_values=True,
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         arbitrary_types_allowed=True
     )
     full_name: str = Field(..., description="The candidate's legal name")
@@ -160,7 +158,7 @@ class CandidateProfile(BaseModel):
     )
     years_of_experience: int = Field(
         0, ge=0, 
-        description="Total years of professional experience"
+        description="Total years of professional experience in the current industry"
     )
     current_location: Optional[str] = Field(
         None, 
@@ -171,8 +169,8 @@ class CandidateProfile(BaseModel):
         description="Target seniority level (e.g., Mid-Senior, Lead)"
     )
     summary: str = Field(
-        "A summary of the candidate's profile",
-        description="Professional biography or executive summary"
+        "",
+        description="Professional biography or executive synthesis of the candidate's skills, experience or other genuinely useful factors"
     )
     industries: List[str] = Field(
         default_factory=list, 
@@ -185,7 +183,7 @@ class CandidateProfile(BaseModel):
 
 class SearchStep(BaseModel):
     title_stems: List[str] = Field(
-        description="The root/stem of the job titles to maximize matches."
+        description="A list of job titles to search for"
     )
     must_have_skills: List[str] = Field(
         description="The 1-2 non-negotiable tools or skills for this segment."
@@ -209,7 +207,7 @@ class AgentWeights(BaseModel):
 class ScraperSettings(BaseModel):
     distance_param: int = Field(default=40)
     region: str = Field(default="uk")
-    max_jobs: int = 20
+    max_jobs: int = 10
 
 
 class ApiSettings(BaseModel):
@@ -220,9 +218,11 @@ class ApiSettings(BaseModel):
     anthropic_api_key: str = ""
     serpapi_key: str = ""
     rapidapi_key: str = ""
+    reed_key: str = ""
 
     use_google: bool = False
     use_linkedin: bool = False
+    use_reed: bool = False
     free_tier: bool = True
 
     models: dict = Field(
@@ -237,7 +237,7 @@ class ApiSettings(BaseModel):
                 "researcher": "gpt-5",
                 "writer": "gpt-4o",
             },
-            "claude": {
+            "anthropic": {
                 "reader": "claude-3-5-haiku",
                 "researcher": "claude-3-5-sonnet",
                 "writer": "claude-3-5-sonnet",
@@ -254,10 +254,12 @@ class PipelineSettings(BaseModel):
 
 class LocationData(BaseModel):
     """SOP: A universal location container for all job APIs."""
+    raw_input: str
     city: str      
-    state_full: Optional[str] 
+    state_full: Optional[str] = None
     country_full: str     
     country_code: str   
+    postcode: Optional[str] = None
     
     @property
     def linkedin_string(self) -> str:
@@ -269,6 +271,11 @@ class LocationData(BaseModel):
     def google_string(self) -> str:
         """City level as per SerpApi docs: 'London'"""
         return self.city
+    
+    @property
+    def reed_string(self) -> str:
+        """Sends full location to reed"""
+        return self.postcode if self.postcode else self.city
     
 
 def generate_safe_id(input_string: str) -> str:

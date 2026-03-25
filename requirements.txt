@@ -28,3 +28,5 @@ langchain-openai
 langchain-anthropic
 langchain-pinecone
 geopy
+beautifulsoup4
+anthropic

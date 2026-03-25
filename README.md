@@ -1,106 +1,104 @@
 # 🤖 AI Career Matcher & Research Pipeline
 
-A modular, state-driven AI pipeline that transforms a raw CV into a curated list of high-match job opportunities. Using a **Directed Acyclic Graph (DAG)** architecture, the system coordinates three specialized agents to parse, search, and analyze career data in real-time.
+A modular, state-driven **BYOK (Bring Your Own Key)** AI pipeline that transforms a raw CV into a curated, high-fidelity list of job opportunities. This system uses a **Directed Acyclic Graph (DAG)** architecture to coordinate specialized agents that perform deep gap analysis and seniority auditing in real-time.
 
 ---
 
-## 📊 Workflow Logic
+## 📊 Workflow Architecture
 
-The following diagram illustrates how the `AgentState` flows through your LangGraph nodes:
+The system orchestrates state transitions across high-concurrency nodes, utilizing your own vector database for persistent global job caching.
 
 ```mermaid
 graph TD
-    Start((START)) --> Ingest[main.py: Ingest Input Folder]
-    Ingest -->|raw_cv_text| Parser[cv_parser_node]
-    Parser -->|cv_data: CandidateProfile| Researcher[researcher_node]
-    Researcher -->|research_data: RawJobMatchList| Writer[writer_node]
-    Writer -->|writer_data: AnalysedJobMatchList| Output[Save to docx and Rich Table]
-    Output --> End((END))
-
-    subgraph External_Tools [External Tools]
-        Researcher -.-> SerpAPI[scrape_for_jobs tool]
-        Ingest -.-> MID[MarkItDown Parser]
+    Start((START)) --> Ingest[Streamlit: CV/Profile Upload]
+    Ingest -->|cv_data| Parser[CV Parser Node]
+    Parser -->|Profile ID| Researcher[Researcher Node]
+    
+    subgraph Discovery_Phase [Discovery & Persistence]
+        Researcher --> Scraper[Multi-Source Scraper Service]
+        Scraper -.-> Reed[Reed.co.uk API]
+        Scraper -.-> LinkedIn[LinkedIn RapidAPI]
+        Scraper -.-> Google[SerpAPI]
+        Scraper --> Sync[Global Job Library: Pinecone]
     end
 
-    style Start fill:#f9f,stroke:#333,stroke-width:2px
-    style End fill:#f9f,stroke:#333,stroke-width:2px
-    style Parser fill:#d1e7ff,stroke:#007bff
-    style Researcher fill:#d1e7ff,stroke:#007bff
-    style Writer fill:#d1e7ff,stroke:#007bff
+    Sync -->|RawJobMatchList| Auditor[Auditor/Writer Node]
+    
+    subgraph Analysis_Phase [Deep Audit]
+        Auditor --> Cache[Analysis Cache]
+        Cache -->|Misses| LLM[Claude 4.6 / Gemini 2.0]
+        LLM -->|Scoring & Gap Analysis| Results[AnalysedJobMatchList]
+    end
 
+    Results --> UI[Streamlit Dashboard]
+    UI --> End((END))
+
+    style Start fill:#f9f,stroke:#333
+    style End fill:#f9f,stroke:#333
+    style Discovery_Phase fill:#f5f5f5,stroke:#666,stroke-dasharray: 5 5
+    style Analysis_Phase fill:#f5f5f5,stroke:#666,stroke-dasharray: 5 5
 ```
 
 ---
 
 ## 🌟 Key Features
 
-* **Intelligent CV Parsing:** Extracts structured Pydantic models from messy `.docx` or `.pdf` files using a zero-creative, high-fidelity extraction engine.
-* **Live Job Searching:** Integrates with **SerpAPI** (Google Jobs) to find real-world vacancies based on extracted candidate skills and user-defined location.
-* **Deep Fit Analysis:** A "Placement Specialist" agent scores matches and provides a "Why you match" vs. "The Gap" analysis for every role using Gemini 1.5 Pro.
-* **Rich CLI & Document Output:** View results in a beautiful terminal dashboard (via `Rich`) and receive a timestamped `.docx` report.
-* **Automated Quality Assurance:** Includes a comprehensive `pytest` suite with GitHub Actions integration for continuous testing.
-
----
-
-## 📂 Project Structure
-
-| Directory/File | Description |
-| --- | --- |
-| `main.py` | Entry point. Handles file ingestion, rich terminal output, and document saving. |
-| `graph.py` | Defines the LangGraph workflow logic and node transitions. |
-| `nodes/` | Specialized logic for `cv_parser`, `researcher`, and `writer` agents. |
-| `tests/` | Pytest suite including unit tests for nodes and tool mocks. |
-| `.github/` | CI/CD configuration for automated testing on every push. |
-| `schema.py` | Pydantic models for `CandidateProfile`, `RawJobMatch`, and `AnalysedJobMatch`. |
+* **Multi-Engine Precision Scraper:** Orchestrates parallel searches across **Reed**, **LinkedIn**, and **Google Jobs**. Uses a Cartesian product of titles and skills to ensure maximum market coverage.
+* **The "Auditor" Guardrails:** Implements a strict **Track-Based Seniority Audit**. The system explicitly separates *Total Career Tenure* from *Relevant Track Experience* to prevent score hallucinations.
+* **BYOK Persistence (Pinecone):** 
+  *  **Namespace Isolation:** Segregates raw global job data from user-specific match analyses.
+  * **Deterministic Deduplication:** URL-based hashing ensures a single source of truth across multiple job boards.
+* **High-Fidelity Markdown UI:** A custom text-processing engine that converts messy HTML/text into professional, scannable briefings.
+* **Niche Skill Prioritization:** Specific weighting logic for high-value certifications (e.g., **Quantexa**, **Databricks**) to surface specialized opportunities.
 
 ---
 
 ## 🛠️ Installation & Setup
 
-### 1. Prerequisites
+### 1. Prerequisites (BYOK)
+To run this pipeline, you must provide your own API keys and infrastructure names:
 
-* Python 3.11+
-* Google Gemini API Key 
-* SerpAPI Key
+* **Embedding Model:** A valid model ID (e.g., `models/gemini-embedding-001`).
+* **Vector DB:** A [Pinecone](https://www.pinecone.io/) Index (ensure dimensions match your chosen embedding model).
+* **LLM Providers:** Anthropic (Claude), OpenAI (ChatGPT), Google (Gemini) keys.
+* **Scrapers**:
+  * A [SerpAPI](https://serpapi.com/) key for Google Job search (generous free tier)
+  * A [RapidAPI](https://rapidapi.com/hub) key for LinkedIn Job search (limited free tier)
+  * A [Reed](https://www.reed.co.uk/developers/) key for Reed Job search (free)
 
-### 2. Environment Setup
+### 2. Environment Configuration
+Create a `.streamlit/secrets.toml` or a root `.env` file:
 
-```bash
-pip install -r requirements.txt
+```toml
+EMBEDDING_MODEL = "gemini-embedding-001"
+PINECONE_API_KEY = "your_pinecone_key"
+PINECONE_NAME = "your_index_name"
+GEMINI_API_KEY = "your_gemini_key"
 ```
 
-Create an `.env` file in the root directory with your keys for `GOOGLE_API_KEY` and `SERPAPI_KEY`.
-
-_Note: I made an `alt.env` file to use when I run out of Gemini credits_ 
-
-### 3. Running Tests
-
-We use `pytest` with `pytest-mock` to verify agent logic without consuming API credits:
-
+### 3. Launching the App
 ```bash
-pytest -v
+# Install dependencies
+pip install uv
+uv pip install -r requirements.txt
+
+# Launch the Streamlit dashboard
+streamlit run dashboard.py
 ```
 
 ---
 
-## 🚀 Usage
-
-Run the main application:
-
-```bash
-python main.py
-```
-
-1. **Input:** The script will ask for your target job title and location.
-2. **Process:** The agents coordinate through the LangGraph workflow.
-3. **Result:** View matches in the terminal and find your report in `files/output/`.
+## 🚀 The Auditor Logic
+The system's "Auditor" node is programmed to be **Hyper-Critical**. Every match includes a conservative 0-100 score and a "Gap Analysis" covering:
+1.  **Seniority Audit:** Explicitly compares "Years in Track" vs. Job Requirements.
+2.  **Tech Stack Synergies:** Bolds "Anchor" skills and highlights missing technologies.
+3.  **Retention Risk:** Flags roles that are significantly above or below the candidate's professional maturity.
 
 ---
 
-## 🛠️ Technologies Used
-
+## 🛠️ Tech Stack
 * **Orchestration:** [LangGraph](https://github.com/langchain-ai/langgraph)
-* **LLM:** Google Gemini (Pro & Flash)
-* **Search:** SerpAPI (Google Jobs Engine)
-* **Testing:** Pytest & GitHub Actions
-* **UI:** Rich (Terminal) & `python-docx` (Export)
+* **Models:** Gemini, Anthropic, OpenAI
+* **Vector Database:** Pinecone (Serverless)
+* **Search Engines:** Reed API, SerpAPI, LinkedIn (RapidAPI)
+* **UI:** Streamlit

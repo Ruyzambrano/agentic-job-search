@@ -21,7 +21,8 @@ def get_job_analysis(cv_text, _config, _models):
 
     serializable_output = {
         "messages": [str(m.content) for m in final_state.get("messages", [])],
-        "active_profile_id": final_state.get("active_profile_id")
+        "active_profile_id": final_state.get("active_profile_id"),
+        "active_profile": final_state.get("cv_data").model_dump()
     }
 
     return dumps(serializable_output)

@@ -32,10 +32,12 @@ def resolve_location(user_input: str, region_hint: str) -> Optional[LocationData
         addr = loc.raw.get('address', {})
         
         return LocationData(
+            raw_input=user_input,
             city=addr.get('city') or addr.get('town') or addr.get('village') or user_input,
             state_full=addr.get('state'),
             country_full=addr.get('country', 'United Kingdom'),
-            country_code=addr.get('country_code', api_region).lower()
+            country_code=addr.get('country_code', api_region).lower(),
+            postcode = addr.get("postalcode") or addr.get("postcode") or addr.get("postal_code")
         )
     except (GeocoderTimedOut, Exception):
-        return LocationData(city=user_input, country_full=region_hint, country_code=api_region)
+        return LocationData(raw_input=user_input, city=user_input, country_full=region_hint, country_code=api_region)
