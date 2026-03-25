@@ -1,5 +1,5 @@
 """Storage Service: Handles all vector database persistence and retrieval."""
-
+from time import sleep
 from datetime import datetime, timezone, timedelta
 from json import loads, dumps
 from typing import List, Optional, Any
@@ -168,7 +168,7 @@ class StorageService:
 
         response = index.fetch(ids=list(cache_map.keys()), namespace=self.NS_USER_DATA)
         vectors = response.vectors if response else {}
-
+        
         for cid, job in cache_map.items():
             if cid in vectors:
                 meta = vectors[cid].metadata
@@ -215,16 +215,33 @@ class StorageService:
                     final_jobs.append(job)
 
         if to_upsert:
-            store.add_texts(
-                texts=[x["text"] for x in to_upsert],
-                ids=[x["id"] for x in to_upsert],
-                metadatas=[
-                    {
-                        **x["metadata"], 
-                        "job_url": x["metadata"].get("job_url")
-                    } for x in to_upsert
-                ],
-            )
+            batch_size = 10
+            print(f"Batching {len(to_upsert)} in {len(to_upsert)//batch_size} chunks")
+            
+            for i in range(0, len(to_upsert), batch_size):
+                print(f"BATCH {i}")
+                batch = to_upsert[i : i + batch_size]
+                
+                texts = [x["text"] for x in batch]
+                ids = [x["id"] for x in batch]
+                metadatas = [{**x["metadata"], "job_url": x["metadata"].get("job_url")} for x in batch]
+
+                try:
+                    store.add_texts(
+                        texts=texts,
+                        ids=ids,
+                        metadatas=metadatas,
+                    )
+                    if i + batch_size < len(to_upsert):
+                        sleep(1)
+                        
+                except Exception as e:
+                    if "429" in str(e):
+                        print("⏳ Burst limit hit. Waiting 10s...")
+                        sleep(10)
+                        store.add_texts(texts=texts, ids=ids, metadatas=metadatas)
+                    else:
+                        raise e
         return [
             RawJobMatch(**j) if isinstance(j, dict) else j 
             for j in final_jobs
@@ -243,6 +260,7 @@ class StorageService:
         
         d["id"] = job.id
         d["created_at_ts"] = int(datetime.now(timezone.utc).timestamp())
+        d["job_url"] = str(job.job_url)
         
         for k, v in d.items():
             if v is None:
@@ -254,7 +272,7 @@ class StorageService:
         return d
 
     def _parse_cached_job(self, metadata: dict) -> RawJobMatch:
-        list_fields = ["qualifications", "key_skills", "attributes"]
+        list_fields = ["qualifications", "key_skills", "attributes", "responsibilities", "benefits"]
         for field in list_fields:
             value = metadata.get(field)
             if isinstance(value, str):

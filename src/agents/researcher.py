@@ -21,16 +21,8 @@ You are a Universal Recruitment Strategist. Your goal is to map out a search arc
 ## OBJECTIVE
 Generate a `SearchQueryPlan` consisting of 3-4 distinct `SearchStep` objects. Each step must target a specific "talent segment" (e.g., Core, Senior/Lead, Specialist, or Adjacent).
 
-## THE "STEMMING" PROTOCOL (CRITICAL)
-To maximize reach across different search engine algorithms, you must provide **Word Stems** rather than full words for job titles. 
-- **Rule**: Provide the root of the word that captures all variations (singular, plural, and gerund).
-- **Example (Engineering)**: Use 'Engin' (matches Engineer, Engineering, Engineers).
-- **Example (Management)**: Use 'Manag' (matches Manager, Management, Managing).
-- **Example (Nursing)**: Use 'Nurs' (matches Nurse, Nursing).
-- **Example (Analysis)**: Use 'Analyt' (matches Analyst, Analytics, Analytical).
-
 ## GUIDELINES FOR SEARCH STEPS
-1. **Title Stems**: Provide a list of 2-3 root stems. DO NOT include symbols like :*, |, &, or !.
+1. **Titles**: Provide a list of 2-3 full job titles relevant to the search role, including roles adjacent to the search. DO NOT include symbols like :*, |, &, or !.
 2. **Must-Have Skills**: Provide 1-2 "Anchor" keywords (tools, certifications, or specific hard skills) that define that segment.
 3. **Segmentation Strategy**:
    - **Step 1 (The Core)**: The most common industry-standard stems.
@@ -104,16 +96,22 @@ async def researcher_node(state: AgentState, config: RunnableConfig) -> Dict[str
     final_queries = filter_redundant_queries(query_plan.steps, threshold=80)
 
     log_message(f"Created {len(final_queries)} job queries")
+    print(f"Created {len(final_queries)} job queries")
 
     raw_results = await scraper.run_research(final_queries, search_location)
 
     synced_jobs = storage.sync_global_library(raw_results, ttl_days=7)
 
     log_message(f"Research complete! {len(synced_jobs)} unique roles identified.")
+    print(f"Research complete! {len(synced_jobs)} unique roles identified.")
 
+    try:
+        research_data = [j.model_dump() for j in synced_jobs]
+    except Exception as e:
+        print(f"ERROR RETURNING RESEARCH DATA: {e}")
     return {
         "messages": [new_message], 
-        "research_data": RawJobMatchList(jobs=[j.model_dump() for j in synced_jobs])
+        "research_data": RawJobMatchList(jobs=research_data)
     }
 
 

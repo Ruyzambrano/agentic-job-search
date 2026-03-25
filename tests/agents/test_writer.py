@@ -41,7 +41,7 @@ async def test_writer_node_cache_miss_triggers_llm(
         "writer_agent": mock_agent,     
         "pipeline_settings": mock_settings, 
         "user_id": "user_123",
-        "active_profile_id": "prof_123"
+        "active_profile_id": "prof_123",
     }
 
     mock_storage_service.check_analysis_cache.return_value = ([], [mock_raw_job])

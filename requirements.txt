@@ -28,3 +28,5 @@ langchain-openai
 langchain-anthropic
 langchain-pinecone
 geopy
+html2text
+anthropic

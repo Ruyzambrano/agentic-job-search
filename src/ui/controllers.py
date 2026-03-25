@@ -8,7 +8,7 @@ from src.ui.streamlit_cache import (
 )
 from src.core.embeddings_handler import validate_and_get_models, get_embeddings
 from src.utils.func import get_provider_config, get_model_roles, ModelTypeError
-from src.utils.model_functions import get_gemini_text_models, get_model_index
+from src.utils.model_functions import get_gemini_text_models, get_model_index, get_all_anthropic_models, get_anthropic_text_models
 
 def show_success_toast():
     if st.session_state.get("changed_api_key"):
@@ -20,16 +20,22 @@ def show_success_toast():
     if st.session_state.get("changed_serpapi"):
         st.toast("Changed SerpAPI API Key", icon=":material/work_alert:")
         st.session_state.changed_serpapi = False
+    if st.session_state.get("changed_rapid_api"):
+        st.toast("Changed RapidAPI Key", icon=":material/work_alert:")
+        st.session_state.changed_rapid_api = False
+    if st.session_state.get("changed_reed"):
+        st.toast("Changed Reed API Key", icon=":material/work_alert:")
+        st.session_state.changed_reed = False
     if st.session_state.get("updated_models"):
         st.toast("Updated Model Configuration", icon=":material/model_training:")
         st.session_state.updated_models = False
     if st.session_state.get("updated_setting"):
         st.toast("Settings Updated", icon=":material/exercise:")
         st.session_state.updated_setting = False
-
     if st.session_state.get("reset_settings"):
         st.toast("Settings Reset", icon=":material/refresh:")
         st.session_state.reset_settings = False
+
 
 def init_app():
     """
@@ -78,8 +84,10 @@ def hydrate_keys(storage):
         "serpapi_key",
         "ai_provider",
         "rapidapi_key",
+        "reed_key",
         "use_google",
         "use_linkedin",
+        "use_reed",
         "free_tier",
     ]
 
@@ -94,6 +102,7 @@ def hydrate_keys(storage):
 
         if new_val is not None and new_val != old_val:
             new_data_found = True
+            setattr(st.session_state.pipeline_settings.api_settings, k, new_val)
 
     if new_data_found:
         st.rerun()
@@ -114,7 +123,6 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
         st.error("No CV text found to process.")
         return None
 
-    # Prepare configuration for the LangGraph nodes
     config = {
         "configurable": {
             "user_id": st.user.sub if st.user else "local-user",
@@ -189,9 +197,13 @@ def set_models_for_pipeline(new_provider: str, free_tier: bool = False) -> dict:
         all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
         text_models = get_gemini_text_models(all_models, free_tier)
         return get_models_for_pipelines(text_models, new_provider.lower())
-    # TODO: Implement openai and anthropic
-    # if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
-    #     st.header("TODO: Get models")
+    if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):
+        st.header("TODO: Get models")
+    if new_provider == "Anthropic" and getattr(api_settings, "anthropic_api_key"):
+        pages = get_all_anthropic_models(api_settings.anthropic_api_key, free_tier)
+        models = [page.model_dump() for page in pages]
+        text_models = get_anthropic_text_models(models, free_tier)
+        return get_models_for_pipelines(text_models, new_provider.lower())
 
 
 def get_models_for_pipelines(text_models: list[dict], new_provider: str):

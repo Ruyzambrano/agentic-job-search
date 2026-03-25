@@ -56,7 +56,7 @@ def set_new_key(key_name: str, new_key: str, storage: LocalStorage, setting_type
     return False
 
 
-def save_provider_config(provider: str, model_map: dict, storage: LocalStorage):
+def save_provider_config(provider: str, model_map: dict, storage: LocalStorage) -> dict:
     """
     Saves model selections (e.g., 'gemini_reader') to browser and state.
     model_map: {"reader": "gemini-1.5-flash", "writer": "gemini-1.5-pro"}

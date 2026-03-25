@@ -26,7 +26,6 @@ def show_specific_job():
     render_sidebar_feed(jobs, subheader, sort_by)
 
     current_job = st.session_state.get("current_job")
-
     if not current_job:
         st.info(
             "👈 Select a job from the sidebar or Home page to see the full analysis."
@@ -37,7 +36,7 @@ def show_specific_job():
     try:
         raw_job = RawJobMatch(**loads(raw_job))
         display_full_job(raw_job, current_job)
-    except Exception as e:
+    except Exception:
         st.warning("There was an issue with the full job description, the external URL may not work")
         display_full_job(raw_job, current_job)
 

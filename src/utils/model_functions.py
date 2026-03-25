@@ -1,5 +1,6 @@
 import streamlit as st
 from google import genai
+from anthropic import Anthropic
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -17,6 +18,65 @@ def get_model_index(models_list: list[dict], current_model_id: str) -> int:
     except (ValueError, AttributeError):
         return 0
 
+def get_all_anthropic_models(api_key: str = None, free_tier: bool = False):
+    """Fetches all available Claude models"""
+    if free_tier or not api_key:
+        return []
+    try: 
+        client = Anthropic(
+            api_key=api_key
+        )
+        page = client.models.list()
+        return page
+    except Exception as e:
+        st.write(str(e))
+        return []
+
+def get_anthropic_text_models(models: list, free_tier: bool = False):
+    """Filters Anthropic models and adds capability-based badges."""
+    if not models or not isinstance(models[0], dict):
+        return models
+
+    suitable_models = []
+    
+    for m in models:
+        if not is_valid_anthropic_model(m):
+            continue
+
+        model_id = m.get("id")
+        label = m.get("display_name", model_id)
+        caps = m.get("capabilities", {})
+
+        if caps.get("thinking", {}).get("supported"):
+            label += " | 🧠 (Thinking Mode)"
+        
+        if "haiku" in model_id:
+            label += " | ⚡ (Fast & Cheap)"
+            
+        if "opus" in model_id:
+            label += " | 🏆 (SOTA Reasoning)"
+
+        suitable_models.append({"id": model_id, "label": label})
+
+    return sorted(suitable_models, key=lambda x: x["id"], reverse=True)
+
+
+def is_valid_anthropic_model(model: dict) -> bool:
+    """Filters out specialized/internal Anthropic models."""
+    model_id = model.get("id", "").lower()
+    
+    exclude_list = [
+        "moderation", 
+        "legacy", 
+        "search-index", 
+        "vision-only", 
+        "internal"
+    ]
+    
+    if any(x in model_id for x in exclude_list):
+        return False
+        
+    return "claude" in model_id and ("4-" in model_id or "5-" in model_id)
 
 def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
     """Fetches available models from Google API or returns hardcoded free tier."""
@@ -24,7 +84,7 @@ def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
         return [
             {
                 "id": "gemini-2.5-flash",
-                "label": "Gemini 2.5 Flash | ⚡ (Fast) | 🎯 (Default)",
+                "label": "Gemini 2.5 Flash | ⚡ (Fast)",
             },
             {
                 "id": "gemini-2.5-flash-lite",
@@ -34,6 +94,10 @@ def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
                 "id": "gemini-3-flash-preview",
                 "label": "Gemini 3 Flash Preview | 🧠 (Deep Reasoning)",
             },
+            {
+                "id": "gemini-3.1-flash-lite-preview",
+                "label": "Gemini 3.1 Flash Lite | 🧠 (Deep Reasoning) | ⚡ (Lite)"
+            }
         ]
     try:
         client = genai.Client(api_key=api_key)

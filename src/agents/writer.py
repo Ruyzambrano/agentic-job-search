@@ -7,13 +7,13 @@ from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableConfig
+from html2text import html2text
 
 from src.schema import (
     AnalysedJobMatchListWithMeta,
     AnalysedJobMatchList,
     RawJobMatchList,
     AnalysedJobMatchWithMeta,
-    generate_safe_id
 )
 from src.state import AgentState
 from src.services.storage_service import StorageService
@@ -46,8 +46,7 @@ For every job, provide:
 ### FINAL JSON SAFETY CHECK
 - You are producing NATIVE JSON. 
 - If a job description contains double quotes, you MUST use single quotes in your 'Why' and 'Gap' fields.
-- Example: Instead of "He said "Hello"", use "He said 'Hello'".
-- NO NEWLINES: Everything for one job must be on a single line in the JSON string."""
+- Example: Instead of "He said "Hello"", use "He said 'Hello'"."""
     if free_tier:
         writer_llm.rate_limiter = InMemoryRateLimiter(
             requests_per_second=0.09, check_every_n_seconds=0.1, max_bucket_size=1
@@ -82,6 +81,7 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
         research_jobs = research_data
 
     log_message(f"Auditing {len(research_jobs.jobs)} jobs against profile...")
+    print(f"Auditing {len(research_jobs.jobs)} jobs against profile...")
 
     final_analyses, jobs_to_process = storage.check_analysis_cache(
         research_jobs, profile_id
@@ -94,7 +94,7 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
 
     max_concurrency = 1 if settings.api_settings.free_tier else 3
     semaphore = asyncio.Semaphore(max_concurrency)
-    chunk_size = 3
+    chunk_size = 5
     chunks = [
         jobs_to_process[i : i + chunk_size]
         for i in range(0, len(jobs_to_process), chunk_size)
@@ -103,7 +103,9 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     log_message(
         f"Cache Miss: Analyzing {len(jobs_to_process)} jobs in {len(chunks)} batches..."
     )
-
+    print(
+        f"Cache Miss: Analyzing {len(jobs_to_process)} jobs in {len(chunks)} batches..."
+    )
     tasks = [
         _analyze_chunk(chunk, agent, state, semaphore, settings) for chunk in chunks
     ]
@@ -138,29 +140,61 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     "messages": [HumanMessage(content=f"Audited {len(final_analyses_meta)} roles.")],
 }
 
-
 async def _analyze_chunk(chunk, agent, state, semaphore, settings) -> List[Any]:
-    """Handles the actual LLM call for a subset of jobs."""
+    """Handles LLM call with industry-agnostic seniority guardrails."""
     w = settings.weights
+    profile = state['cv_data']
+    
     async with semaphore:
-        context = "\n".join([
-            f"ID: {generate_safe_id(j.job_url)} | TITLE: {j.title} | DESC: {j.description[:1500]}" 
-            for j in chunk
-        ])
+        profile_summary = (
+            f"--- CANDIDATE DOSSIER ---\n"
+            f"NAME: {profile.full_name}\n"
+            f"CURRENT TRACK EXPERIENCE: {profile.years_of_experience} years\n"
+            f"PREVIOUS ROLES: {profile.job_titles}"
+            f"CORE SKILLS: {', '.join(profile.key_skills)}\n"
+            f"--------------------------\n"
+        )
+
+        context_parts = []
+        for j in chunk:
+            clean_desc = html2text(j.description)
+            safe_desc = clean_desc[:2000]
+            
+            job_block = (
+                f"--- JOB START ---\n"
+                f"URL: {j.job_url}\n"
+                f"TITLE: {j.title}\n"
+                f"COMPANY: {j.company}\n"
+                f"LOCATION: {j.location}\n"
+                f"DESCRIPTION: {safe_desc}\n"
+                f"--- JOB END ---"
+            )
+            context_parts.append(job_block)
         
+        context = "\n".join(context_parts)
+                    
         prompt = (
             f"--- AUDIT WEIGHTS ---\n"
-            f"Experience Strictness: {w.experience}/100\n"
-            f"Location Strictness: {w.location}/100\n"
-            f"Retention Risk Strategy: {'Prioritize Growth' if w.retention_risk else 'Lateral Match'}\n"
+            f"{w.model_dump_json(indent=2)}\n"
             f"----------------------\n"
-            f"Analyze these {len(chunk)} jobs:\n{context}"
+            f"{profile_summary}\n"
+            f"TASK: Analyze the following {len(chunk)} jobs against the candidate profile.\n"
+            f"\n--- SCORING DIRECTIVES ---\n"
+            f"1. SENIORITY RULE: Use ONLY 'CURRENT TRACK EXPERIENCE' ({profile.years_of_experience} yrs) "
+            f"to match against the job's seniority requirements (e.g., Senior/Lead). "
+            f"Do NOT use 'TOTAL CAREER TENURE' to satisfy industry-specific experience gaps.\n"
+            f"2. INDUSTRY MATCH: If the job is in one of the candidate's target industries "
+            f"({', '.join(profile.industries)}), apply a +10 point relevance bonus.\n"
+            f"3. SKILL SYNERGY: Apply a point bonus if niche skills are required.\n"
+            f"4. MAPPING: job_url, company, and location MUST match the input exactly.\n"
+            f"5. REASONING: Start reasoning with: 'Candidate has {profile.years_of_experience} years in this track vs [X] years required by the role.'\n"
+            f"\nJOBS TO ANALYZE:\n{context}"
         )
 
         try:
             response = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-            structured_data = response.get("structured_response")
-            return structured_data.jobs if structured_data else []
+            structured_data = response.get("structured_response") or response
+            return structured_data.jobs if hasattr(structured_data, 'jobs') else []
         except Exception as e:
-            log_message(f"⚠️ JSON Parsing Error in chunk: {str(e)[:100]}")
+            log_message(f"⚠️ Analysis Error: {str(e)[:100]}")
             return []

@@ -23,7 +23,7 @@ class JobScraperService:
 
     async def run_research(self, queries: List[SearchStep], location: LocationData) -> RawJobMatchList:
         """Primary entry point to gather jobs from all enabled sources."""
-        if not (self.api_cfg.use_google or self.api_cfg.use_linkedin):
+        if not any([self.api_cfg.use_google, self.api_cfg.use_linkedin, self.api_cfg.use_reed]):
             info("⚠️ No scrapers enabled. Skipping search.")
             return RawJobMatchList(jobs=[])
 
@@ -35,9 +35,10 @@ class JobScraperService:
                     tasks.append(self._scrape_google(client, q, location))
                 if self.api_cfg.use_linkedin:
                     tasks.append(self._scrape_linkedin(client, q, location))
+                if self.api_cfg.use_reed:
+                    tasks.append(self._scrape_reed(client, q, location))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
-
         all_jobs = []
         for res in results:
             if isinstance(res, list):
@@ -71,7 +72,7 @@ class JobScraperService:
             error(f"Google Scrape Error for query '{query}': {e}")
             return []
 
-    async def _scrape_linkedin(self, client, query_obj: SearchStep, location: LocationData):
+    async def _scrape_linkedin(self, client: httpx.AsyncClient, query_obj: SearchStep, location: LocationData):
         """Internal handler for RapidAPI (LinkedIn). Uses semaphore for rate limiting."""
         async with self._semaphore:
             headers = {
@@ -104,6 +105,43 @@ class JobScraperService:
             except Exception as e:
                 error(f"LinkedIn Scrape Error for query '{query_obj}': {e}")
                 return []
+
+    async def _scrape_reed(self, client: httpx.AsyncClient, step: SearchStep, location: LocationData):
+        query_strings = JobQueryCompiler.generate_reed_queries(step)
+        
+        search_tasks = []
+        for qs in query_strings:
+            params = {"keywords": qs, 
+                      "locationName": location.reed_string, 
+                      "resultsToTake": self.scrap_cfg.max_jobs
+                      }
+            search_tasks.append(client.get("https://www.reed.co.uk/api/1.0/search", 
+                                        params=params, 
+                                        auth=(self.api_cfg.reed_key, "")))
+        responses = await asyncio.gather(*search_tasks, return_exceptions=True)
+        all_job_metas = []
+        for resp in responses:
+            if isinstance(resp, httpx.Response):
+                data = resp.json()
+                all_job_metas.extend(data.get("results", []))
+        unique_metas = {m['jobId']: m for m in all_job_metas}.values()
+        detail_tasks = [self._get_full_reed_job(client, m) for m in unique_metas]
+        final_jobs = await asyncio.gather(*detail_tasks, return_exceptions=True)
+        return [j for j in final_jobs if isinstance(j, RawJobMatch)]
+    
+    async def _get_full_reed_job(self, client: httpx.AsyncClient, job: dict) -> dict:
+        try:
+            job_url = job.get("externalUrl") or job.get("jobUrl") or ""
+            job_id = job.get("jobId")
+            if not job_id:
+                return None
+            response = await client.get(f"https://www.reed.co.uk/api/1.0/jobs/{job_id}",
+                                        auth=(self.api_cfg.reed_key, ""))
+            response.raise_for_status()
+            return self._map_reed_to_schema(response.json(), job_url)
+        except Exception as e:
+            print(f"Reed Scrape Error for job '{job_id}': {e}")
+            return None
 
     def _get_highlights(self, highlights: list[dict]) -> list[dict]:
         return {
@@ -139,15 +177,14 @@ class JobScraperService:
         apply_opts = item.get("apply_options", [])
         url = self._get_best_apply_link(apply_opts)
         highlights = self._get_highlights(item.get("highlights", {}))
-        print
         return RawJobMatch(
-            title=item.get("title", "Unknown Title"),
-            company_name=item.get("company_name", "Unknown Company"),
-            location=item.get("location", "Unknown Location"),
+            title=item.get("title") or "Unknown Title",
+            company_name=item.get("company_name") or "Unknown Company",
+            location=item.get("location") or "Unknown Location",
             job_url=url,
-            description=item.get("description", ""),
-            salary_string=ext.get("salary", "Not specified"),
-            posted_at=ext.get("posted_at", ""),
+            description=item.get("description") or "",
+            salary_string=ext.get("salary") or "Not specified",
+            posted_at=ext.get("posted_at") or "",
             qualifications=highlights.get("Qualifications", []),
             benefits=highlights.get("Benefits", []),
             responsibilities=highlights.get("Responsibilities", []),
@@ -211,6 +248,28 @@ class JobScraperService:
             is_contract=contract,
             schedule_type=schedule,
         )
+    
+    def _map_reed_to_schema(self, job: Dict, job_url: str) -> RawJobMatch:
+        try:
+            return RawJobMatch(
+                title=job.get("jobTitle"),
+                company_name=job.get("employerName"),
+                location=job.get("locationName"),
+                job_url=job_url,
+                salary_min=job.get("yearlyMinimumSalary", job.get("minimumSalary")),
+                salary_max=job.get("yearlyMaximumSalary", job.get("maximumSalary")),
+                salary_string=job.get("salary") or "",
+                description=job.get("jobDescription"),
+                schedule_type="Full Time" if job.get('fullTime') else "Part Time" if job.get('partTime') else "Unknown",
+                is_contract=job.get('contractType') != "Permanent",
+                posted_at=job.get('datePosted', ""),
+                qualifications=[], 
+                responsibilities=[],
+                benefits=[]
+            )
+        except:
+            print(f"FAILED TO PARSE JOB: {job}")
+
 
     def _process_and_deduplicate(self, flat_list: List[RawJobMatch]) -> RawJobMatchList:
         unique_jobs = {j.job_url: j for j in flat_list if j.job_url}

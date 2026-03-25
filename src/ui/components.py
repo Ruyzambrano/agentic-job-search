@@ -4,7 +4,7 @@ from datetime import datetime
 import streamlit as st
 from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
-
+from html2text import html2text
 from src.utils.text_processing import extract_base_locations
 from src.utils.local_storage import get_local_storage, set_new_key, save_provider_config
 from src.ui.streamlit_cache import get_cv_text
@@ -148,7 +148,7 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
                 st.write("### 📝 Profile Analysis")
                 st.write(reasoning)
 
-        st.markdown("### 🛠 Tech Stack")
+        st.markdown("### 🛠 Skill Stack")
         badge_html = "".join(
             [
                 f'<span style="background-color:#e1e4e8; color:#0366d6; padding:4px 12px; margin:4px; border-radius:12px; font-weight:bold; display:inline-block;">{tech}</span>'
@@ -182,47 +182,62 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
     if hasattr(full_job, "description") and full_job.description:
         st.subheader("Job Description")
         with st.container(border=True):
-            lines = [
-                line.strip()
-                for line in full_job.description.split("\n")
-                if line.strip()
-            ]
+            st.write(format_raw_job_description(full_job))
 
-            header_keywords = [
-                "about",
-                "the role",
-                "responsibilities",
-                "what you'll do",
-                "requirements",
-                "must have",
-                "bonus points",
-                "team & culture",
-                "benefits",
-                "location",
-                "we offer",
-                "must have",
-                full_job.company.lower(),
-                full_job.company.replace("-", " ").lower(),
-                full_job.title.lower(),
-            ]
 
-            for line in lines:
-                is_header = (
-                    any(key in line.lower() for key in header_keywords)
-                    and len(line) < 85
-                )
+def format_raw_job_description(raw_job: RawJobMatch) -> str:
+    """
+    Standardizes raw text or HTML into clean, high-fidelity Markdown.
+    Optimized for Reed/LinkedIn 'noisy' descriptions.
+    """
+    description = raw_job.description or ""
+    
+    if any(tag in description for tag in ["<p>", "<h1>", "<li>", "<ul>"]):
+        return html2text(description)
+    
+    lines = [
+        line.strip()
+        for line in description.split("\n")
+        if line.strip() and not re.match(r"^#J-\d+-[A-Za-z]+$", line.strip())
+    ]
 
-                if current_job.company.lower() in line.lower() and len(line) < 50:
-                    is_header = True
+    company_clean = raw_job.company.lower()
+    title_clean = raw_job.title.lower()
+    formatted_output = []
 
-                if is_header:
-                    st.markdown(f"#### {line}")
-                elif line.startswith(("•", "·", "-", "*")):
-                    content = line.lstrip("•·-* ").strip()
-                    st.markdown(f"* {content}")
-                else:
-                    st.write(line)
+    header_keywords = [
+        "responsibilities", "nice to have", "required skills",
+        "practical information", "the role", "about us", "soft skills",
+        "about the role", f"about {company_clean.split()[0]}",
+        "requirements", "benefits", "environment", "who you are"
+    ]
+    formatted_output.append(f"### {lines.pop(0)}")
 
+    for line in lines:        
+        lower_line = line.lower()
+        st.write(line)
+        is_header = (
+            (any(key == lower_line for key in header_keywords)) or
+            (any(key in lower_line for key in header_keywords) and len(line) < 40) or
+            (company_clean in lower_line and len(line) < 50) or
+            (title_clean in lower_line and len(line) < 25)
+        )
+
+        if is_header:
+            formatted_output.append(f"\n#### {line.upper() if len(line) < 20 else line.title()}")
+            
+        elif line.startswith(("•", "·", "-", "*", "–")):
+            content = re.sub(r"^[•·\-\*–]\s*", "", line).strip()
+            formatted_output.append(f"* {content}")
+            
+        elif ":" in line and len(line.split(":")[0]) < 15:
+            key, val = line.split(":", 1)
+            formatted_output.append(f"**{key.strip()}:** {val.strip()}")
+            
+        else:
+            formatted_output.append(line)
+
+    return "\n\n".join(formatted_output)
 
 def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by: str):
     jobs = sort_analysed_job_matches_with_meta(jobs, sort_by)
@@ -509,48 +524,74 @@ def render_api_settings(storage: LocalStorage):
         help=f"Get your key from {config['url']}",
     ).strip()
 
-    st.divider()
-    st.subheader("Search Provider Settings")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        new_use_google = st.toggle("Enable Google (SerpAPI)", value=api.use_google)
-        new_serpapi_key = st.text_input(
-            "SerpAPI Key",
-            type="password",
-            value=api.serpapi_key,
-            disabled=not new_use_google,
-        ).strip()
-
-    with col2:
-        new_use_linkedin = st.toggle(
-            "Enable LinkedIn (RapidAPI)", value=api.use_linkedin
-        )
-        new_rapidapi_key = st.text_input(
-            "RapidAPI Key",
-            type="password",
-            value=getattr(api, "rapidapi_key", ""),
-            disabled=not new_use_linkedin,
-            help="Get from 'LinkedIn Job Search API' on RapidAPI",
-        ).strip()
-
-    if st.button("Save Settings to Browser", key="set_keys", type="primary"):
+    if st.button("Save API Key to Browser", key="set_api_keys", type="primary"):
         st.session_state.changed_api_key = set_new_key(
             config["key"], new_api_key, storage, "api_settings"
         )
         st.session_state.changed_provider = set_new_key(
             "ai_provider", new_provider, storage, "api_settings"
         )
+
+    st.divider()
+    st.subheader("Search Provider Settings")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        with st.container(border=True):
+            new_use_reed = st.toggle("Enable Reed", value=api.use_reed)
+            new_reed_key = st.text_input(
+                "Reed API Key",
+                type="password",
+                value=api.reed_key,
+                disabled=not new_use_reed,
+            ).strip()
+
+        with st.container(border=True):
+            new_use_google = st.toggle("Enable Google (SerpAPI)", value=api.use_google)
+            new_serpapi_key = st.text_input(
+                "SerpAPI Key",
+                type="password",
+                value=api.serpapi_key,
+                disabled=not new_use_google,
+            ).strip()
+
+    with col2:
+        with st.container(border=True):
+            new_use_linkedin = st.toggle(
+                "Enable LinkedIn (RapidAPI)", value=api.use_linkedin
+            )
+            new_rapidapi_key = st.text_input(
+                "RapidAPI Key",
+                type="password",
+                value=getattr(api, "rapidapi_key", ""),
+                disabled=not new_use_linkedin,
+                help="Get from 'LinkedIn Job Search API' on RapidAPI",
+            ).strip()
+
+    if st.button("Save Settings to Browser", key="set_keys", type="primary"):
         st.session_state.changed_serpapi = set_new_key(
             "serpapi_key", new_serpapi_key, storage, "api_settings"
+            )
+
+        st.session_state.changed_rapid_api = set_new_key(
+            "rapidapi_key", new_rapidapi_key, storage, "api_settings"
+            )
+        st.session_state.changed_reed = set_new_key(
+            "reed_key", new_reed_key, storage, "api_settings"
         )
 
-        set_new_key("rapidapi_key", new_rapidapi_key, storage, "api_settings")
-
-        set_new_key("use_google", new_use_google, storage, "api_settings")
-        set_new_key("use_linkedin", new_use_linkedin, storage, "api_settings")
-
-        st.success("Configuration saved! Some changes may require a refresh.")
+        st.session_state.changed_use_google = set_new_key("use_google", new_use_google, storage, "api_settings")
+        st.session_state.changed_use_linkedin = set_new_key("use_linkedin", new_use_linkedin, storage, "api_settings")
+        st.session_state.changed_use_reed = set_new_key("use_reed", new_use_reed, storage, "api_settings")
+        if any([
+            st.session_state.changed_serpapi,
+            st.session_state.changed_rapid_api,
+            st.session_state.changed_reed,
+            st.session_state.changed_use_google,
+            st.session_state.changed_use_linkedin,
+            st.session_state.changed_use_reed]
+        ):
+            st.success("Configuration saved! Some changes may require a refresh.")
 
     st.divider()
     st.write(":red[To see a full list of models, enter your API Key]")
@@ -562,6 +603,7 @@ def render_api_settings(storage: LocalStorage):
         if st.button("Save Model Configuration"):
             save_provider_config(new_provider, model_map, storage)
             set_new_key("free_tier", free_tier, storage, "api_settings")
+            api.models[new_provider.lower()] = model_map
             st.session_state.updated_models = True
 
 
