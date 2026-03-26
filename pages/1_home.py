@@ -1,8 +1,7 @@
 import streamlit as st
 from json import loads
 from src.ui.components import (
-    display_profile, display_job_matches, display_profile_management,
-    add_sidebar_support, show_how
+    display_profile, display_job_matches, display_profile_management, show_how, add_sidebar_support
 )
 from src.utils.geo import resolve_location
 from src.ui.navigation import sidebar_handler, profile_selector
@@ -87,5 +86,5 @@ def render_results_section(storage):
         st.info("No matches found for this profile yet. Hit search to start!")
 
 if __name__ == "__main__":
-    add_sidebar_support()
     home_page()
+    add_sidebar_support()

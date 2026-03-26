@@ -42,5 +42,5 @@ def show_specific_job():
 
 
 if __name__ == "__main__":
-    add_sidebar_support()
     show_specific_job()
+    add_sidebar_support()

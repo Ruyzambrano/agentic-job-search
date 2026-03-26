@@ -157,5 +157,5 @@ def main():
 
 
 if __name__ == "__main__":
-    add_sidebar_support()
     main()
+    add_sidebar_support()

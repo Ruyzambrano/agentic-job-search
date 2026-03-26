@@ -5,6 +5,7 @@ Main Entry Point: Handles authentication, navigation, and global service initial
 import streamlit as st
 from st_social_media_links import SocialMediaIcons
 
+from src.ui.components import add_sidebar_support
 from src.ui.controllers import init_app
 from src.ui.navigation import login_screen
 

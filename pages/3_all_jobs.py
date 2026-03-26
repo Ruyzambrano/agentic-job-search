@@ -40,5 +40,5 @@ def all_jobs_page():
 
 
 if __name__ == "__main__":
-    add_sidebar_support()
     all_jobs_page()
+    add_sidebar_support()

@@ -37,5 +37,5 @@ def global_job_list():
 
 
 if __name__ == "__main__":
-    add_sidebar_support()
     global_job_list()
+    add_sidebar_support()

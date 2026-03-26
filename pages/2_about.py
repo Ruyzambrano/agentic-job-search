@@ -1,7 +1,5 @@
 import streamlit as st
 
-from src.ui.components import add_sidebar_support
-
 def about_page():
     st.title("📖 About the Pipeline")
     st.markdown("""
@@ -80,7 +78,8 @@ def about_page():
     """)
 
     st.caption("Version 1.2.0 | Agentic Career Research Pipeline")
+    if st.button("Support this project",  type="primary"):
+        st.switch_page("pages/9_support.py")
 
 if __name__ == "__main__":
-    add_sidebar_support()
     about_page()
