@@ -1,7 +1,7 @@
 """Storage Service: Handles all vector database persistence and retrieval."""
 from time import sleep
 from datetime import datetime, timezone, timedelta
-from json import loads, dumps
+from json import loads, dumps, JSONDecodeError
 from typing import List, Optional, Any
 import streamlit as st
 
@@ -420,6 +420,20 @@ class StorageService:
             jobs = []
             for match in results.get("matches", []):
                 meta = match.get("metadata", {})
+                
+                list_fields = ["benefits", "responsibilities", "qualifications", "key_skills", "attributes"]
+                
+                for field in list_fields:
+                    val = meta.get(field)
+                    if isinstance(val, str):
+                        try:
+                            meta[field] = loads(val)
+                        except JSONDecodeError:
+                            meta[field] = []
+                    
+                    if not meta.get(field):
+                        meta[field] = []
+
                 jobs.append(RawJobMatch(**meta))
             return jobs
         except Exception as e:

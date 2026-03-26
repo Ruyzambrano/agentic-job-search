@@ -23,8 +23,8 @@ if __name__ == "__main__":
                 ],
             "Global": 
                 [
-                    st.Page(page="pages/6_market_views.py", title="Market Trends", icon="📊"),
-                    st.Page(page="pages/5_global_jobs.py", title="Global Library", icon="🌐")
+                    st.Page(page="pages/5_global_jobs.py", title="Global Library", icon="🌐"),
+                    st.Page(page="pages/6_market_views.py", title="Market Trends", icon="📊")
                 ],
             "Settings": 
                 [
