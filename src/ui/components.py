@@ -95,17 +95,52 @@ def display_job_match(job: AnalysedJobMatchWithMeta):
 
 def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatch):
     col_header, col_score = st.columns([3, 1])
+    
     with col_header:
-        st.title(f"🏢 {current_job.title}")
-        st.subheader(f"{current_job.company} | {current_job.location}")
+        st.markdown(f"<h1>{current_job.title}</h1>", unsafe_allow_html=True)
+        st.markdown(
+            f"<p style='color: #94A3B8; font-size: 16px; font-family: Inter, sans-serif; letter-spacing: 0.05em;'>"
+            f"{current_job.company.upper()} &nbsp; | &nbsp; {current_job.location.upper()}</p>", 
+            unsafe_allow_html=True
+        )
+
     with col_score:
         score = current_job.top_applicant_score
-        color = "green" if score > 85 else "orange" if score > 60 else "red"
+        
+        # 🎨 THE DISTINCT METALLIC RAG
+        if score >= 85:
+            # High: Deep Polished Gold
+            color = "#D4AF37" 
+            label = "EXCEPTIONAL"
+            bg_tint = "rgba(212, 175, 55, 0.1)"
+        elif score >= 70:
+            # Mid: Cold Platinum / Champagne Silver (VERY DISTINCT FROM GOLD)
+            color = "#E5E7EB" 
+            label = "COMPATIBLE"
+            bg_tint = "rgba(229, 231, 235, 0.08)"
+        else:
+            # Low: Deep Oxidized Copper (Vivid enough to see 'Red')
+            color = "#FF7654" 
+            label = "LOW MATCH"
+            bg_tint = "rgba(255, 118, 84, 0.05)"
+
         st.markdown(
             f"""
-            <div style="text-align: center; border: 2px solid {color}; border-radius: 10px; padding: 10px;">
-                <span style="font-size: 14px; color: gray;">MATCH SCORE</span><br>
-                <span style="font-size: 40px; font-weight: bold; color: {color};">{score}%</span>
+            <div style="
+                text-align: center; 
+                border: 1px solid {color}; 
+                background-color: {bg_tint};
+                backdrop-filter: blur(10px);
+                border-radius: 2px; 
+                padding: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            ">
+                <div style="font-size: 10px; letter-spacing: 2px; color: #94A3B8; font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">
+                    {label}
+                </div>
+                <div style="font-size: 46px; font-weight: 400; font-family: 'Playfair Display', serif; color: {color}; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">
+                    {score}%
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -133,7 +168,7 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
 
                 st.divider()
 
-                st.markdown("#### 🚨 Gaps In Your Profile")
+                st.markdown("### 🚨 Gaps In Your Profile")
                 st.write(gap_text)
 
             elif "Why:" in reasoning or "WHY:" in reasoning:
@@ -243,21 +278,25 @@ def format_raw_job_description(raw_job: RawJobMatch) -> str:
 
 def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by: str):
     jobs = sort_analysed_job_matches_with_meta(jobs, sort_by)
+    
+    current_selection = st.session_state.get("current_job")
+    selected_url = current_selection.job_url if current_selection else None
+
     with st.sidebar:
-        subheader.subheader("🎯 Matched Roles")
+        st.subheader("🎯 Matched Roles")
         st.caption(f"Showing {len(jobs)} opportunities")
 
         for job in jobs:
-            is_selected = st.session_state.get("current_job") == job
-            button_label = (
-                f"**{job.title}**\n\n{job.company}\n\n{job.top_applicant_score}% Match"
-            )
-
+            is_selected = "secondary"
+            if selected_url == job.job_url:
+                is_selected = "primary"
+            
+            button_label = f"{job.title} \n\n {job.company} \n\n {job.top_applicant_score}% Match"
             if st.button(
                 button_label,
                 key=f"btn_{job.job_url}_{job.analysed_at}",
                 use_container_width=True,
-                type="primary" if is_selected else "secondary",
+                type=is_selected,
             ):
                 st.session_state.current_job = job
                 st.rerun()
