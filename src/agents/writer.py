@@ -81,7 +81,6 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
         research_jobs = research_data
 
     log_message(f"Auditing {len(research_jobs.jobs)} jobs against profile...")
-    print(f"Auditing {len(research_jobs.jobs)} jobs against profile...")
 
     final_analyses, jobs_to_process = storage.check_analysis_cache(
         research_jobs, profile_id
@@ -103,9 +102,7 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     log_message(
         f"Cache Miss: Analyzing {len(jobs_to_process)} jobs in {len(chunks)} batches..."
     )
-    print(
-        f"Cache Miss: Analyzing {len(jobs_to_process)} jobs in {len(chunks)} batches..."
-    )
+
     tasks = [
         _analyze_chunk(chunk, agent, state, semaphore, settings) for chunk in chunks
     ]

@@ -3,7 +3,7 @@ from json import loads
 
 import streamlit as st
 
-from src.ui.components import jobs_filter_sidebar, display_job_matches
+from src.ui.components import jobs_filter_sidebar, display_job_matches, add_sidebar_support
 from src.ui.controllers import init_app
 from src.ui.streamlit_cache import get_cached_all_jobs_for_user
 from src.schema import AnalysedJobMatchWithMeta
@@ -41,3 +41,4 @@ def all_jobs_page():
 
 if __name__ == "__main__":
     all_jobs_page()
+    add_sidebar_support()

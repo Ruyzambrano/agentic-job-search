@@ -15,6 +15,7 @@ from src.ui.altair_handler import (
     get_skill_delta,
 )
 from src.ui.controllers import init_app
+from src.ui.components import add_sidebar_support
 
 def display_dashboard(profiles: list, jobs: list):
     """Renders the advanced analytical view of market data."""
@@ -157,3 +158,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    add_sidebar_support()

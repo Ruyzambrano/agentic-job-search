@@ -138,7 +138,7 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
     return get_job_analysis(raw_cv_text, config, models)
 
 
-def search_for_new_jobs(active_profile_meta: dict, user_id: str):
+def search_for_new_jobs(active_profile_meta: dict, user_id: str, desired_location):
     """
     Controller for the 'Existing Profile' flow.
     Re-runs the researcher and writer nodes without re-parsing the CV.
@@ -149,7 +149,7 @@ def search_for_new_jobs(active_profile_meta: dict, user_id: str):
         "configurable": {
             "user_id": user_id,
             "active_profile_id": profile_id,
-            "location": st.session_state.get("desired_location", ""),
+            "location": desired_location,
             "role": st.session_state.get("desired_role", ""),
             "pipeline_settings": st.session_state.pipeline_settings,
             "storage_service": st.session_state.storage_service,
