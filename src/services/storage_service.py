@@ -414,7 +414,7 @@ class StorageService:
     def get_all_global_jobs(self, limit: int = 100) -> List[RawJobMatch]:
         """Retrieves raw job data using the hashed ID (O(1) lookup)."""
         try:
-            store = self._get_store(self.NS_USER_DATA)
+            store = self._get_store(self.NS_GLOBAL_JOBS)
             index = store.get_pinecone_index(self.index_name)
             results = index.query(
                 vector=[0.0] * 3072,
