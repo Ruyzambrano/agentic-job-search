@@ -57,7 +57,7 @@ def get_model_cache(api_key: str, free_tier: bool = False, last_updated: float =
     return get_all_gemini_models(api_key, free_tier)
 
 @st.cache_data(show_spinner=False, ttl=600) 
-def get_cached_profile_matches(_storage, profile: Any):
+def get_cached_profile_matches(_storage, profile: Any, last_updated: float = 0.0):
     """SOP: Cache the expensive Pinecone query for profile matches."""
     if not profile:
         return []

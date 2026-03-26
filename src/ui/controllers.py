@@ -53,7 +53,7 @@ def init_app():
     if "storage_service" not in st.session_state:
         try:
             embeddings = get_embeddings()
-            st.session_state.storage_service = get_storage_service(embeddings, st.session_state.last_updated)
+            st.session_state.storage_service = get_storage_service(embeddings, st.session_state.get("last_updated"))
         except Exception as e:
             st.error(f"Failed to initialize Storage Service: {e}")
 
@@ -92,6 +92,10 @@ def hydrate_keys(storage):
         "use_linkedin",
         "use_reed",
         "free_tier",
+        "use_indeed",
+        "indeed_key",
+        "use_theirstack",
+        "theirstack_key"
     ]
 
     for provider, item in st.session_state.provider_config.items():

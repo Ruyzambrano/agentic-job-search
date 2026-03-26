@@ -592,6 +592,15 @@ def render_api_settings(storage: LocalStorage):
                 disabled=not new_use_google,
             ).strip()
 
+        with st.container(border=True):
+            new_use_theirstack = st.toggle("Enable TheirStack", value=api.use_theirstack)
+            new_theirstack_key = st.text_input(
+                "TheirStack Key",
+                type="password",
+                value=api.theirstack_key,
+                disabled=not new_use_theirstack,
+            ).strip()
+
     with col2:
         with st.container(border=True):
             new_use_linkedin = st.toggle(
@@ -602,6 +611,18 @@ def render_api_settings(storage: LocalStorage):
                 type="password",
                 value=getattr(api, "rapidapi_key", ""),
                 disabled=not new_use_linkedin,
+                help="Get from 'LinkedIn Job Search API' on RapidAPI",
+            ).strip()
+
+        with st.container(border=True):
+            new_use_indeed = st.toggle(
+                "Enable Indeed (HasData)", value=api.use_indeed
+            )
+            new_hasdata_key = st.text_input(
+                "HasData API Key",
+                type="password",
+                value=getattr(api, "indeed_key", ""),
+                disabled=not new_use_indeed,
                 help="Get from 'LinkedIn Job Search API' on RapidAPI",
             ).strip()
 
@@ -616,17 +637,28 @@ def render_api_settings(storage: LocalStorage):
         st.session_state.changed_reed = set_new_key(
             "reed_key", new_reed_key, storage, "api_settings"
         )
+        st.session_state.changed_indeed = set_new_key(
+            "indeed_key", new_hasdata_key, storage, "api_settings"
+        )
+        st.session_state.changed_theirstack = set_new_key(
+            "theirstack_key", new_theirstack_key, storage, "api_settings"
+        )
 
         st.session_state.changed_use_google = set_new_key("use_google", new_use_google, storage, "api_settings")
         st.session_state.changed_use_linkedin = set_new_key("use_linkedin", new_use_linkedin, storage, "api_settings")
         st.session_state.changed_use_reed = set_new_key("use_reed", new_use_reed, storage, "api_settings")
+        st.session_state.changed_use_indeed = set_new_key("use_indeed", new_use_indeed, storage, "api_settings")
+        st.session_state.changed_use_theirstack = set_new_key("use_theirstack", new_use_theirstack, storage, "api_settings")
+
         if any([
-            st.session_state.changed_serpapi,
-            st.session_state.changed_rapid_api,
-            st.session_state.changed_reed,
-            st.session_state.changed_use_google,
-            st.session_state.changed_use_linkedin,
-            st.session_state.changed_use_reed]
+            st.session_state.get("changed_serpapi"),
+            st.session_state.get("changed_rapid_api"),
+            st.session_state.get("changed_reed"),
+            st.session_state.get("changed_theirstack"),
+            st.session_state.get("changed_use_google"),
+            st.session_state.get("changed_use_linkedin"),
+            st.session_state.get("changed_use_reed"),
+            st.session_state.get("changed_use_theirstack")]
         ):
             st.success("Configuration saved! Some changes may require a refresh.")
 
@@ -637,7 +669,7 @@ def render_api_settings(storage: LocalStorage):
         st.subheader("Select Models")
         free_tier = st.toggle("Show only free tier models", value=api.free_tier)
         model_map = set_models_for_pipeline(new_provider, free_tier)
-        if st.button("Save Model Configuration"):
+        if st.button("Save Model Configuration", type="primary"):
             save_provider_config(new_provider, model_map, storage)
             set_new_key("free_tier", free_tier, storage, "api_settings")
             api.models[new_provider.lower()] = model_map

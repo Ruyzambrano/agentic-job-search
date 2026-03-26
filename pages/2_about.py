@@ -49,7 +49,7 @@ def about_page():
         with st.container(border=True, height="stretch"):
             st.subheader("🔍 Global Search")
             st.markdown("""
-            **SerpAPI & RapidAPI**
+            **SerpAPI and RapidAPI**
             - [SerpAPI](https://serpapi.com/): 100 free searches/mo.
             - [RapidAPI](https://rapidapi.com/): Requires subscription to the [LinkedIn Job Search API](https://rapidapi.com/fantastic-jobs-fantastic-jobs-default/api/linkedin-job-search-api).
             """)
@@ -65,10 +65,39 @@ def about_page():
             **Setup:** Request a free API key at the [Reed Developer Portal](https://www.reed.co.uk/developers/). Provides 1000+ searches each month.
             """)
             st.caption("Best for: Exacting London/UK matches.")
-        
-    st.warning("⚠️ **Note:** Your Pinecone Index Dimensions must exactly match your chosen Embedding Model.")
+    
 
-    st.header("🚀 3. The 'Auditor' Philosophy")
+    col_agg, col_direct = st.columns(2)
+
+    with col_agg:
+        with st.container(border=True, height=400):
+            st.subheader("🌐 Market Aggregator")
+            st.markdown("""
+            **TheirStack API**
+            The "Master Key" for the global market. Aggregates listings from LinkedIn, Indeed, and 300k+ company career pages into a single structured feed.
+            
+            **Setup:**
+            1. Create an account at [TheirStack.com](https://theirstack.com/).
+            2. Generate an API Key in your **Dashboard**.
+            3. Provides structured salary and remote-work data natively.
+            """)
+            st.caption("Usage: Best for high-volume, global tech-track discovery.")
+
+    with col_direct:
+        with st.container(border=True, height=400):
+            st.subheader("🎯 Direct Scraping")
+            st.markdown("""
+            **HasData (Indeed Specialist)**
+            Used to bypass 429 rate-limits on Indeed via high-tenacity proxy rotation and headless browsers.
+            
+            **Setup:**
+            1. Register at [HasData.com](https://hasdata.com/apis/indeed-api).
+            2. Copy your **API Key** from the profile settings.
+            3. This node executes a two-step process: *Listing Scrape* followed by *Full Description Extraction*.
+            """)
+            st.caption("Usage: Best for \"Day 1\" Indeed postings and raw-text extraction.")
+    st.divider()
+    st.header("🚀 The 'Auditor' Philosophy")
     st.markdown("""
     Unlike standard "keyword matchers," this pipeline employs a **Seniority Auditor** logic. When the system analyzes a job, it performs a mathematical check on your career timeline:
     

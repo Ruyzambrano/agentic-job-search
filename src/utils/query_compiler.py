@@ -1,4 +1,4 @@
-from src.schema import SearchStep
+from src.schema import SearchStep, LocationData
 
 class JobQueryCompiler:
     @staticmethod
@@ -31,3 +31,27 @@ class JobQueryCompiler:
                     title_skill_pairings.append(f"{title} {skill}")
 
         return title_skill_pairings
+    
+    @staticmethod
+    def generate_indeed_queries(step: SearchStep) -> list[str]:
+        """Breaks complex SearchSteps into smaller queries"""
+        title_skill_pairings = []
+        for title in step.title_stems:
+            for count, skill in enumerate(step.must_have_skills):
+                if count < 1:
+                    title_skill_pairings.append(f"{title} {skill}")
+
+        return title_skill_pairings
+    
+    @staticmethod
+    def generate_indeed_params(keyword: str, location: LocationData) -> dict:
+        domain_map = {
+            "uk": "uk",
+            "us": "www",
+            "gb": "uk"
+        }
+        return {
+            "keyword": keyword, 
+            "location": location.indeed_string, 
+            "domain": f"{domain_map.get(location.country_code.lower(), "uk")}.indeed.com"
+        }
