@@ -490,7 +490,7 @@ def vector_storage_setting_tab(storage: LocalStorage):
     st.subheader("Vector Store Management")
     st.warning("Pruning the database is permanent. Use with caution.")
 
-    stats = get_cached_stats(storage)
+    stats = get_cached_stats(storage, st.session_state.last_updated)
     
     col1, col2 = st.columns(2)
     
@@ -690,7 +690,7 @@ def reset_setting_to_default_values(setting: str, storage: LocalStorage):
 def cv_handler():
     file = st.file_uploader("Upload CV", type=["pdf", "docx"])
     if file:
-        st.session_state.raw_cv_text = get_cv_text(file)
+        st.session_state.raw_cv_text = get_cv_text(file, st.session_state.last_updated)
         st.success("CV Loaded!")
 
 

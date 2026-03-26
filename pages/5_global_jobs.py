@@ -16,7 +16,7 @@ def global_job_list():
     st.write("Browse the master list of all jobs currently indexed in the system.")
 
     with st.spinner("Loading global index..."):
-        jobs = get_cached_global_jobs(storage, limit=100)
+        jobs = get_cached_global_jobs(storage, limit=100, st.session_state.last_updated)
         jobs = [RawJobMatch(**loads(j)) for j in jobs]
 
     sort_options = {"Posted Date": "posted_at", "Company": "company", "Role": "title"}

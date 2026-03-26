@@ -30,7 +30,7 @@ def sidebar_handler():
         if new_cv:
             try:
                 with st.spinner("🔍 Extracting text..."):
-                    st.session_state["raw_cv_text"] = get_cv_text(new_cv)
+                    st.session_state["raw_cv_text"] = get_cv_text(new_cv, st.session_state.last_updated)
                     st.success("CV Read successfully!")
             except Exception as e:
                 st.error(f"Failed to convert CV: {e}")
@@ -45,7 +45,7 @@ def profile_selector(storage, user_id):
     with st.sidebar:
         st.subheader("🕒 Saved Profiles")
 
-        profiles = get_cached_user_profiles(storage, user_id)
+        profiles = get_cached_user_profiles(storage, user_id, st.session_state.last_updated)
 
         if not profiles:
             st.info("No saved profiles found. Upload a CV to begin.")

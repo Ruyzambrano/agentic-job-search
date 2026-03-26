@@ -1,6 +1,7 @@
 """Streamlit Cache: Performance optimization layer for the UI."""
 from json import dumps
 import asyncio
+from typing import Any
 
 import streamlit as st
 import pandas as pd
@@ -13,7 +14,7 @@ from src.ui.altair_handler import create_salary_chart
 
 
 @st.cache_resource(show_spinner=False)
-def get_job_analysis(cv_text, _config, _models):
+def get_job_analysis(cv_text, _config, _models, last_updated: float = 0.0):
     """
     Wraps the main LangGraph entry point.
     """
@@ -29,7 +30,7 @@ def get_job_analysis(cv_text, _config, _models):
 
 
 @st.cache_data(show_spinner="Processing Document...")
-def get_cv_text(uploaded_file):
+def get_cv_text(uploaded_file, last_updated: float = 0.0):
     """Uses DocumentService to extract text from bytes."""
     service = DocumentService()
     file_bytes = uploaded_file.getvalue()
@@ -37,14 +38,14 @@ def get_cv_text(uploaded_file):
 
 
 @st.cache_data(show_spinner="Generating Report...")
-def generate_docx(state):
+def generate_docx(state, last_updated: float = 0.0):
     """Uses DocumentService to create the download buffer."""
     service = DocumentService()
     return service.generate_research_report(state)
 
 
 @st.cache_resource(show_spinner=False)
-def get_storage_service(_embeddings):
+def get_storage_service(_embeddings, last_updated: float = 0.0):
     """Use cache_resource for the Service Instance."""
     return StorageService(
         index_name=st.secrets["PINECONE_NAME"], embeddings=_embeddings
@@ -52,29 +53,30 @@ def get_storage_service(_embeddings):
 
 
 @st.cache_data(show_spinner=False)
-def get_model_cache(api_key: str, free_tier: bool = False):
+def get_model_cache(api_key: str, free_tier: bool = False, last_updated: float = 0.0):
     return get_all_gemini_models(api_key, free_tier)
 
-
 @st.cache_data(show_spinner=False, ttl=600) 
-def get_cached_profile_matches(_storage: StorageService, profile_id: str):
+def get_cached_profile_matches(_storage, profile: Any):
     """SOP: Cache the expensive Pinecone query for profile matches."""
-    matches = _storage.find_job_matches_for_profile(profile_id)
+    if not profile:
+        return []
+    matches = _storage.find_job_matches_for_profile(profile)
     return [m.model_dump_json() for m in matches]
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_cached_user_profiles(_storage: StorageService, user_id: str):
+def get_cached_user_profiles(_storage: StorageService, user_id: str, last_updated: float = 0.0):
     """SOP: Cache the list of profiles for the selector."""
     return _storage.find_all_candidate_profiles(user_id)
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_cached_all_jobs_for_user(_storage: StorageService, user_id: str):
+def get_cached_all_jobs_for_user(_storage: StorageService, user_id: str, last_updated: float = 0.0):
     """Cache all jobs for a singler user"""
     matches = _storage.find_all_jobs_for_user(user_id)
     return [m.model_dump_json() for m in matches]
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_cached_raw_job(_storage: StorageService, job_url: str):
+def get_cached_raw_job(_storage: StorageService, job_url: str, last_updated: float = 0.0):
     """Cache the heavy raw job details to prevent re-fetching over the network."""
     raw_job = _storage.find_raw_job_by_url(job_url)
     
@@ -84,25 +86,25 @@ def get_cached_raw_job(_storage: StorageService, job_url: str):
     return raw_job.model_dump_json()
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_cached_global_jobs(_storage: StorageService, limit=100):
+def get_cached_global_jobs(_storage: StorageService, limit=100, last_updated: float = 0.0):
     results = _storage.get_all_global_jobs(limit)
     return [j.model_dump_json() for j in results]
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_cached_market_data(_storage: StorageService):
+def get_cached_market_data(_storage: StorageService, last_updated: float = 0.0):
     return _storage.get_market_data()
 
 @st.cache_data(show_spinner=False)
-def get_market_dfs(_jobs, _profiles):
+def get_market_dfs(_jobs, _profiles, last_updated: float = 0.0):
     """SOP: Convert Pydantic models to DataFrames once and cache them."""
     df_j = pd.DataFrame([j for j in _jobs])
     df_p = pd.DataFrame([p for p in _profiles])
     return df_j, df_p
 
 @st.cache_resource(show_spinner=False, ttl=3600)
-def get_cached_salary_chart(df):
+def get_cached_salary_chart(df, last_updated: float = 0.0):
     return create_salary_chart(df)
 
 @st.cache_data(show_spinner=False)
-def get_cached_stats(_storage: StorageService):
+def get_cached_stats(_storage: StorageService, last_updated: float = 0.0):
     return _storage.get_index_metrics()

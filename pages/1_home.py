@@ -1,5 +1,7 @@
 import streamlit as st
 from json import loads
+from datetime import datetime
+
 from src.ui.components import (
     display_profile, display_job_matches, display_profile_management, show_how, add_sidebar_support
 )
@@ -31,8 +33,9 @@ def handle_research_actions(cv_placeholder):
                 result = process_new_cv(st.session_state.raw_cv_text, st.session_state.desired_role, geo_obj)
                 st.session_state.active_profile = loads(result).get("cv_data")
                 status.update(label="Profile Created!", state="complete")
-                st.rerun()
-            st.cache_data.clear()
+            st.session_state.last_updated = datetime.now().timestamp()
+            st.rerun()
+            
 
     if st.session_state.active_profile:
         if st.button(f"🔍 Search Market for {st.session_state.desired_role} roles in {st.session_state.loc}", use_container_width=True):
@@ -41,13 +44,13 @@ def handle_research_actions(cv_placeholder):
             with st.status("📡 Scraping & Auditing...", expanded=False) as status:
                 search_for_new_jobs(st.session_state.active_profile, st.user.sub, geo_data)
                 status.update(label="Complete!", state="complete")
-            st.cache_data.clear()
+            st.session_state.last_updated = datetime.now().timestamp()
+            st.rerun()
 
 def home_page():
     init_app()
     user_id = st.user.sub if st.user else "local-user"
     storage = st.session_state.storage_service
-    region = st.session_state.pipeline_settings.scraper_settings.region
     api_settings = st.session_state.pipeline_settings.api_settings
 
     if not any([api_settings.gemini_api_key, api_settings.anthropic_api_key, api_settings.openai_api_key]):
@@ -76,9 +79,8 @@ def render_results_section(storage):
     header_col, sort_col = st.columns([3, 1])
     header_col.subheader("🎯 Top Market Matches")
     sort_by = sort_col.selectbox("Sort by", options=["Score", "Date", "Company"], label_visibility="collapsed")
-    
-    raw_matches = get_cached_profile_matches(storage, st.session_state.active_profile["profile_id"])
-    
+    st.write(st.session_state.active_profile)
+    raw_matches = get_cached_profile_matches(storage, st.session_state.active_profile, st.session_state.last_updated)
     if raw_matches:
         matches = [AnalysedJobMatchWithMeta(**loads(m)) for m in raw_matches]
         display_job_matches(matches, sort_by)
