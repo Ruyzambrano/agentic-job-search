@@ -19,7 +19,7 @@ from src.ui.components import add_sidebar_support
 
 def display_dashboard(profiles: list, jobs: list):
     """Renders the advanced analytical view of market data."""
-    df_j, df_p = get_market_dfs(jobs, profiles)
+    df_j, df_p = get_market_dfs(jobs, profiles, st.session_state.last_updated)
     engine = MarketAnalytics(df_j, df_p)
 
     with st.sidebar:
@@ -144,7 +144,7 @@ def main():
     storage = st.session_state.storage_service
 
     with st.spinner("Fetching Market Data..."):
-        profiles, jobs = get_cached_market_data(storage)
+        profiles, jobs = get_cached_market_data(storage, st.session_state.last_updated)
 
     if not jobs or not profiles:
         st.title("📊 Market Insights")

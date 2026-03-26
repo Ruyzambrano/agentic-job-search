@@ -42,6 +42,9 @@ def init_app():
     Initializes the application state, defines default settings,
     and hydrates values from the browser's local storage.
     """
+    if "last_updated" not in st.session_state:
+        st.session_state.last_udpdated = 0.0
+
     if "pipeline_settings" not in st.session_state:
         st.session_state.pipeline_settings = PipelineSettings()
 
@@ -50,7 +53,7 @@ def init_app():
     if "storage_service" not in st.session_state:
         try:
             embeddings = get_embeddings()
-            st.session_state.storage_service = get_storage_service(embeddings)
+            st.session_state.storage_service = get_storage_service(embeddings, st.session_state.last_updated)
         except Exception as e:
             st.error(f"Failed to initialize Storage Service: {e}")
 
@@ -135,7 +138,7 @@ def process_new_cv(raw_cv_text: str, desired_role: str, desired_location: str):
 
     models = validate_and_get_models()
 
-    return get_job_analysis(raw_cv_text, config, models)
+    return get_job_analysis(raw_cv_text, config, models, st.session_state.last_updated)
 
 
 def search_for_new_jobs(active_profile_meta: dict, user_id: str, desired_location):
@@ -158,7 +161,7 @@ def search_for_new_jobs(active_profile_meta: dict, user_id: str, desired_locatio
 
     models = validate_and_get_models()
 
-    return get_job_analysis("", config, models)
+    return get_job_analysis("", config, models, st.session_state.last_updated)
 
 
 def initialise_pipeline_settings():
@@ -194,7 +197,7 @@ def handle_profile_deletion(storage, profile_id):
 def set_models_for_pipeline(new_provider: str, free_tier: bool = False) -> dict:
     api_settings = st.session_state.pipeline_settings.api_settings
     if new_provider == "Gemini" and getattr(api_settings, "gemini_api_key", None):
-        all_models = get_model_cache(api_settings.gemini_api_key, free_tier)
+        all_models = get_model_cache(api_settings.gemini_api_key, free_tier, st.session_state.last_updated)
         text_models = get_gemini_text_models(all_models, free_tier)
         return get_models_for_pipelines(text_models, new_provider.lower())
     if new_provider == "OpenAI" and getattr(api_settings, "openai_api_key", None):

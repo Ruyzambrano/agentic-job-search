@@ -13,7 +13,7 @@ def show_specific_job():
     user_id = st.user.sub if st.user else "local-user"
     storage = st.session_state.storage_service
 
-    jobs = get_cached_all_jobs_for_user(storage, user_id)
+    jobs = get_cached_all_jobs_for_user(storage, user_id, st.session_state.last_updated)
     if not jobs:
         st.info("Upload a CV to find more jobs")
         st.stop()
@@ -32,7 +32,7 @@ def show_specific_job():
         )
         st.stop()
     with st.spinner("Fetching original job details..."):
-        raw_job = get_cached_raw_job(storage, current_job.job_url)
+        raw_job = get_cached_raw_job(storage, current_job.job_url, st.session_state.last_updated)
     try:
         raw_job = RawJobMatch(**loads(raw_job))
         display_full_job(raw_job, current_job)

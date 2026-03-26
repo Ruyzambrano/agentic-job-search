@@ -285,24 +285,30 @@ class StorageService:
         return RawJobMatch(**metadata)
 
     def find_job_matches_for_profile(
-        self, profile_id: str
+        self, profile: dict
     ) -> List[AnalysedJobMatchWithMeta]:
         """
         SOP: Fetches all analysed job results for a specific profile ID.
         Uses the 3072-dimension dummy vector and filters by document_type.
         """
         try:
+            summary = profile.get("summary")
+            profile_id = profile.get("profile_id")
+            search_vector = self.embeddings.embed_query(summary)
+
             store = self._get_store(self.NS_USER_DATA)
             index = store.get_pinecone_index(self.index_name)
 
             results = index.query(
-                vector=[0.0] * 3072,
-                filter={"profile_id": profile_id, "document_type": "job_analysis"},
+                vector=search_vector,
+                filter={
+                    "profile_id": {"$eq": profile_id},
+                    "document_type": {"$eq": "job_analysis"}
+                },
                 namespace=self.NS_USER_DATA,
-                top_k=20,
+                top_k=50,
                 include_metadata=True,
             )
-
             matches = []
             for m in results.get("matches", []):
                 meta = m.get("metadata", {})

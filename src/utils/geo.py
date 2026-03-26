@@ -48,5 +48,4 @@ def resolve_location(user_input: str, region_hint: str) -> Optional[LocationData
             postcode = postcode
         )
     except (GeocoderTimedOut, Exception) as e:
-        print(e)
         return LocationData(raw_input=user_input, city=user_input, country_full=region_hint, country_code=api_region)

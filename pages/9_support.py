@@ -1,8 +1,6 @@
 import streamlit as st
 
 def support_page():
-    
-    
     col1, col2 = st.columns([1, 2])
     
     with col2:
