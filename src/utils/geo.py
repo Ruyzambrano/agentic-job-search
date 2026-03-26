@@ -19,25 +19,34 @@ def resolve_location(user_input: str, region_hint: str) -> Optional[LocationData
     geolocator = Nominatim(user_agent="job_agent_2026")
     
     try:
-        loc = geolocator.geocode(
+        location = geolocator.geocode(
             user_input, 
             country_codes=api_region, 
             addressdetails=True, 
-            language="en"
+            language="en",
+            extratags=True
         )
         
-        if not loc:
+        if not location:
             return None
+        
+        address = location.raw.get("address", {})
+        postcode = address.get("postcode")
 
-        addr = loc.raw.get('address', {})
+        if not postcode:
+            reverse_loc = geolocator.reverse((location.latitude, location.longitude), addressdetails=True)
+            if reverse_loc:
+                postcode = reverse_loc.raw.get("address", {}).get("postcode")
+
         
         return LocationData(
             raw_input=user_input,
-            city=addr.get('city') or addr.get('town') or addr.get('village') or user_input,
-            state_full=addr.get('state'),
-            country_full=addr.get('country', 'United Kingdom'),
-            country_code=addr.get('country_code', api_region).lower(),
-            postcode = addr.get("postalcode") or addr.get("postcode") or addr.get("postal_code")
+            city=address.get('city') or address.get('town') or address.get('village') or user_input,
+            state_full=address.get('state'),
+            country_full=address.get('country', 'United Kingdom'),
+            country_code=address.get('country_code', api_region).lower(),
+            postcode = postcode
         )
-    except (GeocoderTimedOut, Exception):
+    except (GeocoderTimedOut, Exception) as e:
+        print(e)
         return LocationData(raw_input=user_input, city=user_input, country_full=region_hint, country_code=api_region)

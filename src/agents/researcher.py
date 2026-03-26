@@ -96,14 +96,12 @@ async def researcher_node(state: AgentState, config: RunnableConfig) -> Dict[str
     final_queries = filter_redundant_queries(query_plan.steps, threshold=80)
 
     log_message(f"Created {len(final_queries)} job queries")
-    print(f"Created {len(final_queries)} job queries")
 
     raw_results = await scraper.run_research(final_queries, search_location)
 
     synced_jobs = storage.sync_global_library(raw_results, ttl_days=7)
 
     log_message(f"Research complete! {len(synced_jobs)} unique roles identified.")
-    print(f"Research complete! {len(synced_jobs)} unique roles identified.")
 
     try:
         research_data = [j.model_dump() for j in synced_jobs]

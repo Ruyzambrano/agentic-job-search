@@ -102,3 +102,7 @@ def get_market_dfs(_jobs, _profiles):
 @st.cache_resource(show_spinner=False, ttl=3600)
 def get_cached_salary_chart(df):
     return create_salary_chart(df)
+
+@st.cache_data(show_spinner=False)
+def get_cached_stats(_storage: StorageService):
+    return _storage.get_index_metrics()

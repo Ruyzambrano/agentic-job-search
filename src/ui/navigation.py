@@ -6,10 +6,10 @@ from src.schema import CandidateProfile
 
 def login_screen():
     """Renders the initial authentication interface."""
-    st.container(border=True)
-    st.title("🤖 Agentic Job Auditor")
-    st.subheader("Login to access your personalized job research")
-    st.button("Log in with Google", on_click=st.login, use_container_width=True)
+    with st.container(border=True):
+        st.title("🤖 Agentic Job Auditor")
+        st.subheader("Login to access your personalized job research")
+        st.button("Log in with Google", on_click=st.login, use_container_width=True)
 
 
 def sidebar_handler():
@@ -19,7 +19,7 @@ def sidebar_handler():
     """
     with st.sidebar:
         st.header("📄 CV Management")
-        st.caption("Upload a new CV to trigger a fresh research pipeline.")
+        st.caption("Upload a new CV.")
 
         new_cv = st.file_uploader(
             "Upload CV (PDF, DOCX)",
@@ -59,7 +59,8 @@ def profile_selector(storage, user_id):
                 options[p["profile_id"]] = f"{display_date} | {display_name}"
 
         selected_id = st.selectbox(
-            "Switch Profile Version",
+            "Select a profile",
+            label_visibility="collapsed",
             options=list(options.keys()),
             format_func=lambda x: options[x],
             key="profile_version_selector",

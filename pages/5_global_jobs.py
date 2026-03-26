@@ -3,7 +3,7 @@ from json import loads
 
 import streamlit as st
 
-from src.ui.components import jobs_filter_sidebar, display_raw_job_matches
+from src.ui.components import jobs_filter_sidebar, display_raw_job_matches, add_sidebar_support
 from src.ui.controllers import init_app
 from src.ui.streamlit_cache import get_cached_global_jobs
 from src.schema import RawJobMatch
@@ -37,4 +37,5 @@ def global_job_list():
 
 
 if __name__ == "__main__":
+    add_sidebar_support()
     global_job_list()

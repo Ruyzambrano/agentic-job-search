@@ -15,6 +15,7 @@ from src.schema import (
     generate_safe_id
 )
 from src.utils.text_processing import clean_text_for_embedding
+from src.utils.func import log_message
 
 
 class StorageService:
@@ -139,7 +140,7 @@ class StorageService:
                     "profile_id": profile_id,
                     "analysis_json": a.model_dump_json(),
                     "job_url": a.job_url,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "analysed_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -216,10 +217,9 @@ class StorageService:
 
         if to_upsert:
             batch_size = 10
-            print(f"Batching {len(to_upsert)} in {len(to_upsert)//batch_size} chunks")
+            log_message(f"Batching {len(to_upsert)} in {len(to_upsert)//batch_size+1} chunks")
             
             for i in range(0, len(to_upsert), batch_size):
-                print(f"BATCH {i}")
                 batch = to_upsert[i : i + batch_size]
                 
                 texts = [x["text"] for x in batch]
@@ -234,10 +234,11 @@ class StorageService:
                     )
                     if i + batch_size < len(to_upsert):
                         sleep(1)
+                    log_message(f"Batch {i+1} success!")
                         
                 except Exception as e:
                     if "429" in str(e):
-                        print("⏳ Burst limit hit. Waiting 10s...")
+                        log_message("⏳ Burst limit hit. Waiting 10s to retry...")
                         sleep(10)
                         store.add_texts(texts=texts, ids=ids, metadatas=metadatas)
                     else:
@@ -259,7 +260,7 @@ class StorageService:
         d = job.model_dump(mode='json') 
         
         d["id"] = job.id
-        d["created_at_ts"] = int(datetime.now(timezone.utc).timestamp())
+        d["analysed_at"] = int(datetime.now(timezone.utc).timestamp())
         d["job_url"] = str(job.job_url)
         
         for k, v in d.items():
@@ -461,7 +462,7 @@ class StorageService:
     def cleanup_stale_jobs(self, months_old: int = 6):
         """
         SOP: Purges jobs older than X months from the global library.
-        Requires 'created_at_ts' metadata field to be present.
+        Requires 'analysed_at' metadata field to be present.
         """
         try:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=months_old * 30)
@@ -470,7 +471,7 @@ class StorageService:
             index = self._get_store(self.NS_GLOBAL_JOBS).get_pinecone_index(self.index_name)
 
             delete_response = index.delete(
-                filter={"created_at_ts": {"$lt": cutoff_ts}},
+                filter={"analysed_at": {"$lt": cutoff_ts}},
                 namespace=self.NS_GLOBAL_JOBS
             )
             
@@ -479,3 +480,57 @@ class StorageService:
         except Exception as e:
             st.error(f"Cleanup failed: {e}")
             return None
+
+    def scrub_id_contaminated_urls(self, namespace: str):
+        """Deletes records where the 'job_url' was erroneously populated with an ID."""
+        try:
+            index = self.pc.Index(self.index_name)
+            ids_to_delete = []
+
+            for ids_batch in index.list(namespace=namespace):
+                
+                sub_batch_size = 50
+                for i in range(0, len(ids_batch), sub_batch_size):
+                    sub_group = ids_batch[i : i + sub_batch_size]
+                    
+                    fetch_results = index.fetch(ids=sub_group, namespace=namespace)
+                    vectors = fetch_results.vectors if hasattr(fetch_results, 'vectors') else {}
+                    
+                    for record_id, vector_obj in vectors.items():
+                        metadata = vector_obj.metadata if hasattr(vector_obj, 'metadata') else None
+                        
+                        if metadata:
+                            if metadata.get("document_type") == "job_analysis":
+                                url = str(metadata.get('job_url', ""))
+
+                                if not url.startswith("http") or "://" not in url or url == record_id:
+                                    ids_to_delete.append(record_id)
+
+            if ids_to_delete:
+                for i in range(0, len(ids_to_delete), 1000):
+                    batch = ids_to_delete[i : i + 1000]
+                    index.delete(ids=batch, namespace=namespace)
+                return f"Cleaned {len(ids_to_delete)} records."
+            
+            return "Index is already clean."
+
+        except Exception as e:
+            return f"Scrub failed: {str(e)}"
+
+    def get_index_metrics(self) -> dict:
+        """Fetches real-time vector counts from Pinecone namespaces."""
+        try:
+            index = self.pc.Index(self.index_name)
+            stats = index.describe_index_stats()
+            
+            namespaces = stats.get("namespaces", {})
+            
+            return {
+                "global_count": namespaces.get(self.NS_GLOBAL_JOBS, {}).get("vector_count", 0),
+                "analysis_count": namespaces.get(self.NS_USER_DATA, {}).get("vector_count", 0),
+                "dimension": stats.get("dimension", 0),
+                "index_fullness": stats.get("index_fullness", 0.0)
+            }
+        except Exception as e:
+            print(f"Error fetching index stats: {e}")
+            return {"global_count": 0, "analysis_count": 0}

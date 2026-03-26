@@ -3,7 +3,7 @@ from json import loads
 
 import streamlit as st
 
-from src.ui.components import display_full_job, render_sidebar_feed
+from src.ui.components import display_full_job, render_sidebar_feed, add_sidebar_support
 from src.ui.controllers import init_app
 from src.ui.streamlit_cache import get_cached_all_jobs_for_user, get_cached_raw_job
 from src.schema import AnalysedJobMatchWithMeta, RawJobMatch
@@ -42,4 +42,5 @@ def show_specific_job():
 
 
 if __name__ == "__main__":
+    add_sidebar_support()
     show_specific_job()

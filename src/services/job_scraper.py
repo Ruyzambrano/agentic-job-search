@@ -115,6 +115,7 @@ class JobScraperService:
                       "locationName": location.reed_string, 
                       "resultsToTake": self.scrap_cfg.max_jobs
                       }
+
             search_tasks.append(client.get("https://www.reed.co.uk/api/1.0/search", 
                                         params=params, 
                                         auth=(self.api_cfg.reed_key, "")))
@@ -274,3 +275,5 @@ class JobScraperService:
     def _process_and_deduplicate(self, flat_list: List[RawJobMatch]) -> RawJobMatchList:
         unique_jobs = {j.job_url: j for j in flat_list if j.job_url}
         return RawJobMatchList(jobs=list(unique_jobs.values()))
+    
+

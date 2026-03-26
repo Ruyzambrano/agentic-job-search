@@ -5,9 +5,10 @@ import streamlit as st
 from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
 from html2text import html2text
+
 from src.utils.text_processing import extract_base_locations
 from src.utils.local_storage import get_local_storage, set_new_key, save_provider_config
-from src.ui.streamlit_cache import get_cv_text
+from src.ui.streamlit_cache import get_cv_text, get_cached_stats
 from src.ui.controllers import handle_profile_deletion, set_models_for_pipeline
 from src.utils.func import (
     sort_analysed_job_matches_with_meta,
@@ -18,6 +19,7 @@ from src.utils.func import (
     filter_jobs_by_keywords,
     get_weight_map,
 )
+from src.services.storage_service import StorageService
 from src.schema import AnalysedJobMatchWithMeta, RawJobMatch, AgentWeights
 
 
@@ -485,24 +487,59 @@ def scraping_settings_tab(storage: LocalStorage):
 
 
 def vector_storage_setting_tab(storage: LocalStorage):
-    """TODO: Implement GDPR stuff"""
     st.subheader("Vector Store Management")
     st.warning("Pruning the database is permanent. Use with caution.")
 
+    stats = get_cached_stats(storage)
+    
     col1, col2 = st.columns(2)
+    
     with col1:
-        st.metric("Global Raw Jobs", "1,240", delta="+12 today")
-        if st.button("Clean Expired Jobs", use_container_width=True):
-            st.toast("Checking for expired listings...")
+        st.metric(
+            label="Global Raw Jobs", 
+            value=f"{stats['global_count']:,}", 
+            help="Total unique job descriptions cached in the global library."
+        )
+        if st.button("Refresh Library Stats", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     with col2:
         st.metric(
-            "Active User Profiles", f"{len(st.session_state.get('profiles', []))}"
+            label="Total AI Analyses", 
+            value=f"{stats['analysis_count']:,}",
+            help="Total number of jobs analyzed across all candidate profiles."
         )
-        if st.button("Clear Cache", use_container_width=True):
+        if st.button("Clear App Cache", use_container_width=True):
             st.cache_data.clear()
-            st.success("App cache cleared.")
-    """TODO: If the user is me, clear out old jobs"""
+            st.success("Local cache cleared.")
+
+    if st.user and st.user.email == st.secrets.admin.root:
+        st.divider()
+        st.markdown("### 👑 Admin Infrastructure Tools")
+        st.caption("These actions affect the shared Pinecone Index (Global).")
+
+        admin_col1, admin_col2 = st.columns(2)
+        
+        with admin_col1:
+            st.number_input("How many months?", min_value=0, format="%d")
+            if st.button("🗑️ Purge Stale Jobs", use_container_width=True, type="secondary"):
+                with st.spinner("Deleting old global records..."):
+                    result = storage.cleanup_stale_jobs(months_old=6)
+                    if result:
+                        st.success(f"{len(result)} stale jobs purged successfully.")
+                    else:
+                        st.info("No stale jobs found")
+        
+        with admin_col2:
+            st.space("large")
+            if st.button("🧹 Scrub Contaminated URLs", use_container_width=True, type="secondary"):
+                with st.spinner("Scanning for ID/URL mismatches..."):
+                    msg = storage.scrub_id_contaminated_urls(storage.NS_GLOBAL_JOBS)
+                    st.toast(msg)
+                    
+                    msg_user = storage.scrub_id_contaminated_urls(storage.NS_USER_DATA)
+                    st.success(f"Global: {msg} | User Data: {msg_user}")
 
 
 @st.fragment
@@ -609,6 +646,7 @@ def render_api_settings(storage: LocalStorage):
 
 def render_settings_page():
     storage = get_local_storage()
+    storage_service = st.session_state.storage_service
     tab1, tab2, tab3, tab4 = st.tabs(
         ["🧠 Logic", "📡 Scraping", "💾 Database", "🔑 API"]
     )
@@ -617,7 +655,7 @@ def render_settings_page():
     with tab2:
         scraping_settings_tab(storage)
     with tab3:
-        vector_storage_setting_tab(storage)
+        vector_storage_setting_tab(storage_service)
     with tab4:
         render_api_settings(storage)
 
@@ -665,8 +703,9 @@ def delete_profile_dialogue(store, profile_id):
 
 def display_profile_management(storage, active_profile):
     """Component: UI for profile actions like deletion."""
+    if not active_profile:
+        return
     with st.sidebar:
-        st.divider()
         with st.expander("⚠️ Profile Management"):
             st.warning("Deleting this profile is permanent.")
             if st.button(
@@ -677,3 +716,54 @@ def display_profile_management(storage, active_profile):
                 if handle_profile_deletion(storage, active_profile["profile_id"]):
                     st.rerun()
 
+def add_sidebar_support():
+    with st.sidebar:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 0px;">
+                <p style="font-size: 0.85rem; color: #888; margin-bottom: 0px;">Enjoying the Pipeline?</p>
+                <a href="https://ko-fi.com/yourusername" target="_blank" style="padding-bottom:12px">
+                    <img src="https://ko-fi.com/img/githubbutton_sm.svg" style="height: 32px;" alt="Support me on Ko-fi" />
+                </a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+def show_how():
+    """Redirects users to setup or info pages if keys are missing."""
+    st.image("https://img.icons8.com/layers/100/000000/empty-box.png", width=100)
+    st.title("Ready to start your research?")
+    st.subheader("The pipeline is currently dormant.")
+    
+    st.info("""
+    **Notice:** This is a **Bring Your Own Key (BYOK)** tool. 
+    To protect your privacy and ensure dedicated performance, you must provide your own LLM and Search API keys.
+    """)
+
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        with st.container(border=True):
+            st.markdown("### 📖 New here?")
+            st.write("Learn how the 'Auditor' logic works and what keys you'll need to get started.")
+            if st.button("Read the Guide", width="stretch"):
+                st.switch_page("pages/2_about.py")
+                
+    with col2:
+        with st.container(border=True):
+            st.markdown("### ⚙️ Already have keys?")
+            st.write("Jump straight to the settings to input your API keys and initialize the engine.")
+            if st.button("Go to Settings", type="primary", width="stretch"):
+                st.switch_page("pages/7_settings.py")
+
+    st.divider()
+    
+    with st.expander("Why do I need my own keys?", expanded=False):
+        st.write("""
+        1. **Privacy:** Your CV data stays within your own API logs.
+        2. **Cost:** You only pay for what you use directly to providers like Google, OpenAI or Anthropic.
+        3. **Reliability:** You don't share rate limits with other users of this tool.
+        """)
