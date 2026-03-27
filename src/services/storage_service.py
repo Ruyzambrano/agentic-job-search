@@ -217,7 +217,7 @@ class StorageService:
 
         if to_upsert:
             batch_size = 10
-            log_message(f"Batching {len(to_upsert)} in {len(to_upsert)//batch_size+1} chunks")
+            log_message(f"Batching {len(to_upsert)} in {(len(to_upsert)//batch_size)} chunks")
             
             for i in range(0, len(to_upsert), batch_size):
                 batch = to_upsert[i : i + batch_size]
@@ -242,6 +242,7 @@ class StorageService:
                         sleep(10)
                         store.add_texts(texts=texts, ids=ids, metadatas=metadatas)
                     else:
+                        log_message(f"Batch {i +1} failed: {e}")
                         raise e
         return [
             RawJobMatch(**j) if isinstance(j, dict) else j 

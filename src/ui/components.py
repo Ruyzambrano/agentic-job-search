@@ -346,18 +346,11 @@ def display_raw_job_card(job: RawJobMatch):
         st.markdown(f"##### 💰 `{salary_display}`")
 
         snippet = (
-            job.description[:250] + "..."
-            if len(job.description) > 250
+            job.description[:400] + " ..."
+            if len(job.description) > 400
             else job.description
         )
-        st.write(snippet)
-
-        if job.qualifications:
-
-            chips = "  ".join(
-                [f":blue-background[{q}]" for q in job.qualifications[:5]]
-            )
-            st.markdown(chips)
+        st.write(html2text(snippet))
 
         st.link_button(
             "🌐 View Original Listing", url=job.job_url, use_container_width=True
