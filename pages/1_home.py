@@ -48,7 +48,6 @@ def handle_research_actions(cv_placeholder):
             st.rerun()
 
 def home_page():
-    init_app()
     user_id = st.user.sub if st.user else "local-user"
     storage = st.session_state.storage_service
     api_settings = st.session_state.pipeline_settings.api_settings
@@ -79,7 +78,6 @@ def render_results_section(storage):
     header_col, sort_col = st.columns([3, 1])
     header_col.subheader("🎯 Top Market Matches")
     sort_by = sort_col.selectbox("Sort by", options=["Score", "Date", "Company"], label_visibility="collapsed")
-    st.write(st.session_state.active_profile)
     raw_matches = get_cached_profile_matches(storage, st.session_state.active_profile, st.session_state.last_updated)
     if raw_matches:
         matches = [AnalysedJobMatchWithMeta(**loads(m)) for m in raw_matches]
@@ -88,5 +86,6 @@ def render_results_section(storage):
         st.info("No matches found for this profile yet. Hit search to start!")
 
 if __name__ == "__main__":
+    init_app()
     home_page()
     add_sidebar_support()

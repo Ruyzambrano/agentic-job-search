@@ -9,14 +9,13 @@ from src.ui.streamlit_cache import get_cached_global_jobs
 from src.schema import RawJobMatch
 
 def global_job_list():
-    init_app()
     storage = st.session_state.storage_service
 
     st.title("🌐 Global Job Library")
     st.write("Browse the master list of all jobs currently indexed in the system.")
 
     with st.spinner("Loading global index..."):
-        jobs = get_cached_global_jobs(storage, limit=100, st.session_state.last_updated)
+        jobs = get_cached_global_jobs(storage, 100, st.session_state.last_updated)
         jobs = [RawJobMatch(**loads(j)) for j in jobs]
 
     sort_options = {"Posted Date": "posted_at", "Company": "company", "Role": "title"}
@@ -37,5 +36,6 @@ def global_job_list():
 
 
 if __name__ == "__main__":
+    init_app()
     global_job_list()
     add_sidebar_support()

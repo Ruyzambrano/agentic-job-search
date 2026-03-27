@@ -1,8 +1,9 @@
 import asyncio
 import re
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from logging import info, error
+from datetime import datetime
 
 from src.schema import RawJobMatchList, RawJobMatch, PipelineSettings, WorkSetting, SeniorityLevel, SearchStep, LocationData
 from src.utils.query_compiler import JobQueryCompiler
@@ -23,20 +24,25 @@ class JobScraperService:
 
     async def run_research(self, queries: List[SearchStep], location: LocationData) -> RawJobMatchList:
         """Primary entry point to gather jobs from all enabled sources."""
-        if not any([self.api_cfg.use_google, self.api_cfg.use_linkedin, self.api_cfg.use_reed]):
-            info("⚠️ No scrapers enabled. Skipping search.")
+        if not any([self.api_cfg.use_google, self.api_cfg.use_linkedin, self.api_cfg.use_reed, self.api_cfg.use_indeed, self.api_cfg.use_theirstack]):
+            print("⚠️ No scrapers enabled. Skipping search.")
             return RawJobMatchList(jobs=[])
 
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             tasks = []
-            for q in queries:
+            for count, q in enumerate(queries):
                 if self.api_cfg.use_google:
                     tasks.append(self._scrape_google(client, q, location))
                 if self.api_cfg.use_linkedin:
                     tasks.append(self._scrape_linkedin(client, q, location))
                 if self.api_cfg.use_reed:
                     tasks.append(self._scrape_reed(client, q, location))
+                if self.api_cfg.use_indeed:
+                    if count < 1:
+                        tasks.append(self._scrape_indeed(client, q, location))
+                if self.api_cfg.use_theirstack:
+                    tasks.append(self._scrape_theirstack(client, q, location))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
         all_jobs = []
@@ -108,7 +114,7 @@ class JobScraperService:
 
     async def _scrape_reed(self, client: httpx.AsyncClient, step: SearchStep, location: LocationData):
         query_strings = JobQueryCompiler.generate_reed_queries(step)
-        
+
         search_tasks = []
         for qs in query_strings:
             params = {"keywords": qs, 
@@ -150,6 +156,141 @@ class JobScraperService:
             for highlight in highlights
             if isinstance(highlight, dict) and "title" in highlight
         }
+    
+    async def _scrape_indeed(self, client: httpx.AsyncClient, step: SearchStep, location: LocationData):
+        qs = JobQueryCompiler.generate_indeed_queries(step)
+        
+        headers = {
+            'x-api-key': self.api_cfg.indeed_key,
+            'Content-Type': "application/json"
+        }
+
+        params = JobQueryCompiler.generate_indeed_params(qs, location)
+        try:
+            resp = await client.get("https://api.hasdata.com/scrape/indeed/listing", 
+                                    params=params, headers=headers)
+            resp.raise_for_status()
+            data = resp.json().get("jobs", [])
+            
+        except Exception as e:
+            print(f"Listing error: {e}")
+
+        unique_metas = {m['url']: m for m in data}.values()
+        
+        final_jobs = []
+        for m in unique_metas:
+            job_obj = await self._get_full_indeed_job(client, m, headers)
+            if isinstance(job_obj, RawJobMatch):
+                final_jobs.append(job_obj)
+            await asyncio.sleep(0.5) 
+
+        return final_jobs
+
+    async def _get_full_indeed_job(self, client: httpx.AsyncClient, job: dict, headers: dict) -> Optional[RawJobMatch]:
+        url = job.get("url")
+        if not url: return None
+        
+        try:
+            response = await client.get("https://api.hasdata.com/scrape/indeed/job", 
+                                        params={"url": url}, headers=headers)
+            response.raise_for_status()
+            return self._map_indeed_to_schema(job, response.json())
+        except Exception as e:
+            print(f"Error fetching detail for {url}: {e}")
+            return None
+
+    def _map_indeed_to_schema(self, job: dict, full_job: dict) -> RawJobMatch:
+        details = job.get("details") or []
+        work_setting = WorkSetting.UNKNOWN
+        schedule_type = "unknown"
+        is_contract = False
+        for detail in details:
+            lower_detail = detail.lower()
+            if "contract" in lower_detail.replace("-", " "):
+                is_contract = True
+            if "hybrid" in lower_detail:
+                work_setting = WorkSetting.HYBRID
+            if "remote" in lower_detail:
+                work_setting = WorkSetting.REMOTE
+            if "on site" in lower_detail:
+                work_setting = WorkSetting.ONSITE
+            if "full time" in lower_detail:
+                schedule_type = "Full-time"
+            if "part time" in lower_detail:
+                schedule_type = "Part-time"
+        salary_data = job.get("salary", {})
+        salary_min = salary_data.get("min")
+        salary_max = salary_data.get("max")
+
+        return RawJobMatch(
+            title = job.get("title") or "Unknown title",
+            company = job.get("company") or "Unknown company",
+            location = job.get("location") or "Unknown location",
+            job_url = job.get("url"),
+            qualifications = ["Not specified"],
+            responsibilities = ["Not specified"],
+            benefits = job.get("benefits") or ["Not specified"],
+            seniority_level = SeniorityLevel.NOT_SPECIFIED,
+            description = full_job.get("descriptionHtml") or full_job.get("description") or job.get("description") or "No description provided",
+            salary_max=salary_max,
+            salary_min=salary_min,
+            schedule_type=schedule_type,
+            work_setting=work_setting,
+            is_contract=is_contract,
+            salary_string="Not specified",
+            posted_at=job.get("isoDate") or datetime.now().isoformat()
+        )
+
+    async def _scrape_theirstack(self, client: httpx.AsyncClient, step: SearchStep, location: LocationData):
+        """
+        Internal handler for TheirStack API. 
+        Consumes 1 credit per job. Aggregates from LinkedIn, Indeed, and 300k+ sites.
+        """
+        if not self.api_cfg.theirstack_key:
+            return []
+
+        url = "https://api.theirstack.com/v1/jobs/search"
+        headers = {
+            "Authorization": f"Bearer {self.api_cfg.theirstack_key}",
+            "Content-Type": "application/json"
+        }
+        payload = JobQueryCompiler.generate_theirstack_query(step, location, self.scrap_cfg.max_jobs)
+        try:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            raw_results = data.get("data", [])
+            if isinstance(raw_results, list):
+                return [self._map_theirstack_to_schema(job) for job in raw_results]
+            return []
+        except Exception as e:
+            error(f"TheirStack Scrape Error for {step.title_stems}: {e}")
+            return []
+
+    def _map_theirstack_to_schema(self, item: Dict[str, Any]) -> RawJobMatch:
+        """Standardizes TheirStack results. No second 'Detail' call needed."""
+        work_setting = WorkSetting.UNKNOWN
+        if item.get("remote"):
+            work_setting = WorkSetting.REMOTE
+        if item.get("hybrid"):
+            work_setting = WorkSetting.HYBRID
+        return RawJobMatch(
+            title=item.get("job_title") or "Unknown Title",
+            company_name=item.get("company") or "Unknown Company",
+            location=item.get("location") or "United Kingdom",
+            job_url=item.get("final_url") or item.get("url"),
+            description=item.get("description") or "No description provided.",
+            salary_min=item.get("min_annual_salary"),
+            salary_max=item.get("max_annual_salary"),
+            salary_string=item.get("salary_string") or "Not specified",
+            work_setting=work_setting,
+            posted_at=item.get("date_posted") or datetime.now().isoformat(),
+            qualifications=[],
+            benefits=[],
+            responsibilities=[],
+            is_contract=False,
+            seniority_level=SeniorityLevel.NOT_SPECIFIED
+        )
 
     def _get_best_apply_link(self, apply_options: list[dict]) -> str:
         """Prioritizes LinkedIn, Indeed, and Reed in that order.

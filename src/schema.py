@@ -219,10 +219,14 @@ class ApiSettings(BaseModel):
     serpapi_key: str = ""
     rapidapi_key: str = ""
     reed_key: str = ""
+    indeed_key: str = ""
+    theirstack_key: str = ""
 
     use_google: bool = False
     use_linkedin: bool = False
     use_reed: bool = False
+    use_indeed: bool = False
+    use_theirstack: bool = False
     free_tier: bool = True
 
     models: dict = Field(
@@ -274,8 +278,13 @@ class LocationData(BaseModel):
     
     @property
     def reed_string(self) -> str:
-        """Sends full location to reed"""
+        """Sends full postcode to reed"""
         return self.postcode if self.postcode else self.city
+    
+    @property
+    def indeed_string(self) -> str:
+        """Sends the city to indeed"""
+        return self.city
     
 
 def generate_safe_id(input_string: str) -> str:
