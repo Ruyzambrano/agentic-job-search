@@ -138,7 +138,8 @@ if __name__ == "__main__":
             "https://linkedin.com/in/ruy-zambrano",
             "https://ko-fi.com/ruyzambrano"
         ],
-        colors=["grey", None, None]
+        # GitHub: Slate Silver | LinkedIn: Gold Dust | Ko-fi: Warm Bronze
+        colors=["#94A3B8","#78909C", "#C5A267"]
     )
 
     social_media_icons.render(sidebar=False)
