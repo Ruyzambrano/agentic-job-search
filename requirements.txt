@@ -29,4 +29,5 @@ langchain-anthropic
 langchain-pinecone
 geopy
 html2text
+st-social-media-links 
 anthropic
