@@ -42,7 +42,7 @@ graph TD
     
     subgraph Analysis [Deep Audit & State Management]
         Auditor --> Cache{URL Hashing}
-        Cache -->|Miss| LLM[Gemini 1.5 Pro / Claude 3.5]
+        Cache -->|Miss| LLM[Gemini / Claude / OpenAI]
         LLM -->|Scoring & Gap Analysis| Results[Analysed Dossier]
     end
 
