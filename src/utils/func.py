@@ -29,7 +29,7 @@ class ProviderError(Exception):
 
 def validate_configuration(setting, error_message):
     if not setting:
-        st.error(f"🚨 {error_message}")
+        st.error(f"{error_message}")
         if st.button("Go to Settings"):
             st.switch_page(
                 "pages/7_settings.py"
@@ -96,7 +96,7 @@ def pretty_print_jobs_with_rich(json_data: Any):
 
         skills = get("key_skills", [])
         table.add_row(
-            "Tech Stack", ", ".join(skills) if isinstance(skills, list) else "N/A"
+            "Skill Stack", ", ".join(skills) if isinstance(skills, list) else "N/A"
         )
 
         link = get("job_url", "#")
@@ -143,11 +143,12 @@ def normalize(text: str) -> str:
 
 def get_job_val(job: Any, fields: List[str], default: Any = None) -> Any:
     """Helper to try multiple field names on a Pydantic object or dict."""
+    values_to_return = []
     for field in fields:
         val = getattr(job, field, None) if not isinstance(job, dict) else job.get(field)
         if val is not None:
             return val
-    return default
+    return values_to_return
 
 
 def filter_jobs_by_keywords(
@@ -226,24 +227,3 @@ def get_provider_config() -> dict:
 def get_model_roles() -> List[str]:
     return ["reader", "writer", "researcher"]
 
-
-def show_success_toast():
-    """
-    Checks session state flags and displays temporary
-    success messages to the user.
-    """
-    if st.session_state.get("changed_api_key"):
-        st.toast("API Key Updated", icon="🔑")
-        st.session_state.changed_api_key = False
-
-    if st.session_state.get("updated_setting"):
-        st.toast("Settings Saved", icon="✅")
-        st.session_state.updated_setting = False
-
-    if st.session_state.get("reset_settings"):
-        st.toast("Settings Reset to Defaults", icon="🔄")
-        st.session_state.reset_settings = False
-
-    if st.session_state.get("updated_models"):
-        st.toast("Model Configuration Updated", icon="🤖")
-        st.session_state.updated_models = False

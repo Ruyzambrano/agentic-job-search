@@ -37,6 +37,6 @@ def test_display_profile_renders_headers(mock_st):
     }
     display_profile(profile)
     
-    mock_st.title.assert_called_with("👤 Ruy Zambrano")
+    mock_st.title.assert_called_with("Ruy Zambrano")
     all_calls = [str(c) for c in mock_st.mock_calls]
     assert any("AI Engineer" in call_str for call_str in all_calls)

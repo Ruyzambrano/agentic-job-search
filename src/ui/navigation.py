@@ -7,7 +7,7 @@ from src.schema import CandidateProfile
 def login_screen():
     """Renders the initial authentication interface."""
     with st.container(border=True):
-        st.title("🤖 Agentic Job Auditor")
+        st.title("Agentic Job Auditor")
         st.subheader("Login to access your personalized job research")
         st.button("Log in with Google", on_click=st.login, use_container_width=True)
 
@@ -18,7 +18,7 @@ def sidebar_handler():
     Returns the uploaded file object if a new one is provided.
     """
     with st.sidebar:
-        st.header("📄 CV Management")
+        st.header("CV Management")
         st.caption("Upload a new CV.")
 
         new_cv = st.file_uploader(
@@ -29,7 +29,7 @@ def sidebar_handler():
 
         if new_cv:
             try:
-                with st.spinner("🔍 Extracting text..."):
+                with st.spinner("Extracting text..."):
                     st.session_state["raw_cv_text"] = get_cv_text(new_cv, st.session_state.last_updated)
                     st.success("CV Read successfully!")
             except Exception as e:
@@ -43,7 +43,7 @@ def profile_selector(storage, user_id):
     Sidebar component to browse and select previously saved CV versions.
     """
     with st.sidebar:
-        st.subheader("🕒 Saved Profiles")
+        st.subheader("Saved Profiles")
 
         profiles = get_cached_user_profiles(storage, user_id, st.session_state.last_updated)
 

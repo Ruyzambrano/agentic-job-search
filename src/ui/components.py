@@ -6,7 +6,7 @@ from streamlit_tags import st_tags
 from streamlit_local_storage import LocalStorage
 from html2text import html2text
 
-from src.utils.text_processing import extract_base_locations
+from src.utils.text_processing import extract_base_locations, format_luxury_timestamp
 from src.utils.local_storage import get_local_storage, set_new_key, save_provider_config
 from src.ui.streamlit_cache import get_cv_text, get_cached_stats
 from src.ui.controllers import handle_profile_deletion, set_models_for_pipeline
@@ -19,12 +19,11 @@ from src.utils.func import (
     filter_jobs_by_keywords,
     get_weight_map,
 )
-from src.services.storage_service import StorageService
 from src.schema import AnalysedJobMatchWithMeta, RawJobMatch, AgentWeights
 
 
 def display_profile(profile):
-    st.title(f"👤 {profile.get('full_name')}")
+    st.write(f"## {profile.get('full_name')}")
     st.info(profile.get("summary"))
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -75,7 +74,7 @@ def display_job_match(job: AnalysedJobMatchWithMeta):
                 st.progress(score / 100)
 
         salary_str = format_salary_as_range(job.salary_min, job.salary_max)
-        st.markdown(f"##### 💰 `{salary_str}` &nbsp;&nbsp;")
+        st.markdown(f"##### `{salary_str}` &nbsp;&nbsp;")
 
         st.write(job.job_summary)
 
@@ -91,6 +90,7 @@ def display_job_match(job: AnalysedJobMatchWithMeta):
             st.session_state.current_job = job
             st.switch_page("pages/4_job_view.py")
         st.link_button("Apply for this role", url=job.job_url, use_container_width=True)
+        st.caption(f"Job found {format_luxury_timestamp(job.analysed_at)}")
 
 
 def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatch):
@@ -107,19 +107,15 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
     with col_score:
         score = current_job.top_applicant_score
         
-        # 🎨 THE DISTINCT METALLIC RAG
         if score >= 85:
-            # High: Deep Polished Gold
             color = "#D4AF37" 
             label = "EXCEPTIONAL"
             bg_tint = "rgba(212, 175, 55, 0.1)"
         elif score >= 70:
-            # Mid: Cold Platinum / Champagne Silver (VERY DISTINCT FROM GOLD)
             color = "#E5E7EB" 
             label = "COMPATIBLE"
             bg_tint = "rgba(229, 231, 235, 0.08)"
         else:
-            # Low: Deep Oxidized Copper (Vivid enough to see 'Red')
             color = "#FF7654" 
             label = "LOW MATCH"
             bg_tint = "rgba(255, 118, 84, 0.05)"
@@ -151,7 +147,7 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
     left_col, right_col = st.columns([2, 1])
 
     with left_col:
-        st.markdown("### 📝 Job Summary")
+        st.markdown("### Job Summary")
         st.info(current_job.job_summary)
 
         reasoning = current_job.top_applicant_reasoning
@@ -163,29 +159,29 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
                 why_text = re.sub(r"(?i)why:", "", parts[0]).strip()
                 gap_text = parts[1].strip()
 
-                st.markdown("### ✅ Why You're a Great Fit")
+                st.markdown("### Why You're a Great Fit")
                 st.write(why_text)
 
                 st.divider()
 
-                st.markdown("### 🚨 Gaps In Your Profile")
+                st.markdown("### Gaps In Your Profile")
                 st.write(gap_text)
 
             elif "Why:" in reasoning or "WHY:" in reasoning:
                 why_text = re.sub(r"(?i)why:", "", reasoning).strip()
 
-                st.markdown("#### ✅ Why You're a Great Fit")
+                st.markdown("#### Why You're a Great Fit")
                 st.write(why_text)
 
                 st.divider()
-                st.markdown("#### 🚨 Gaps In Your Profile")
+                st.markdown("#### Gaps In Your Profile")
                 st.success("No significant gaps detected for this role.")
 
             else:
-                st.write("### 📝 Profile Analysis")
+                st.write("### Profile Analysis")
                 st.write(reasoning)
 
-        st.markdown("### 🛠 Skill Stack")
+        st.markdown("### Skill Stack")
         badge_html = "".join(
             [
                 f'<span style="background-color:#e1e4e8; color:#0366d6; padding:4px 12px; margin:4px; border-radius:12px; font-weight:bold; display:inline-block;">{tech}</span>'
@@ -201,16 +197,16 @@ def display_full_job(full_job: AnalysedJobMatchWithMeta, current_job: RawJobMatc
             use_container_width=True,
             type="primary",
         )
-        with st.expander("💰 Financials & Schedule", expanded=True):
+        with st.expander("Financials & Schedule", expanded=True):
             st.write(
                 f"**Salary Range:** {format_salary_as_range(current_job.salary_min, current_job.salary_max)}"
             )
             st.write(f"**Contract Type:** {" | ".join(current_job.attributes)}")
             st.write(f"**In-Office Policy:** {current_job.office_days}")
 
-        with st.expander("📍 Requirements Checklist", expanded=True):
+        with st.expander("Requirements Checklist", expanded=True):
             for q in current_job.qualifications:
-                st.write(f"✅ {q}")
+                st.write(f"- {q}")
 
         st.caption(
             f"Job found at: {datetime.fromisoformat(current_job.analysed_at).strftime("%d/%m/%Y %H:%M")}"
@@ -283,7 +279,7 @@ def render_sidebar_feed(jobs: list[AnalysedJobMatchWithMeta], subheader, sort_by
     selected_url = current_selection.job_url if current_selection else None
 
     with st.sidebar:
-        st.subheader("🎯 Matched Roles")
+        st.subheader("Matched Roles")
         st.caption(f"Showing {len(jobs)} opportunities")
 
         for job in jobs:
@@ -313,37 +309,26 @@ def display_raw_job_matches(jobs, sort_by):
 def display_raw_job_card(job: RawJobMatch):
     """Displays a single raw job listing with metadata badges."""
     with st.container(border=True):
-        card_id = f"{job.job_url}"
-        col_title, col_meta = st.columns([4, 2])
+        st.markdown(f"### {job.title}")
+        st.markdown(f"**{job.company}** | {job.location}")
 
-        with col_title:
-            st.markdown(f"### {job.title}")
-            st.markdown(f"**{job.company}** | {job.location}")
-
-            setting_emoji = "🏠" if job.work_setting.value == "Remote" else "🏢"
-            badges = f"{setting_emoji} `{job.work_setting.value}` · 📅 `{job.schedule_type}`".title().replace(
-                "_", "-"
-            )
-            if job.is_contract:
-                badges += " · 📑 :red[Contract]"
-            st.markdown(badges)
-
-        with col_meta:
-            st.button(
-                f"🕒 {job.posted_at or 'Recently'}",
-                disabled=True,
-                use_container_width=True,
-                key=card_id,
-            )
-
+        badge_list = []
+        if job.work_setting.value.lower() != "unknown":
+            badge_list.append(job.work_setting.value)
+        if job.schedule_type.lower() != "unknown":
+            badge_list.append(job.schedule_type)
+        if job.is_contract:
+            badge_list.append(":red[Contract]")
+        badges = " • ".join(badge_list)
+        
+        st.markdown(badges)
         st.divider()
-
         salary_display = "Not Specified"
         if job.salary_min and job.salary_max:
             salary_display = f"£{job.salary_min:,} - £{job.salary_max:,}"
         elif job.salary_string:
             salary_display = job.salary_string
-        st.markdown(f"##### 💰 `{salary_display}`")
+        st.markdown(f"##### `{salary_display}`")
 
         snippet = (
             job.description[:400] + " ..."
@@ -353,11 +338,12 @@ def display_raw_job_card(job: RawJobMatch):
         st.write(html2text(snippet))
 
         st.link_button(
-            "🌐 View Original Listing", url=job.job_url, use_container_width=True
+            "View Original Listing", url=job.job_url, use_container_width=True
         )
+        st.caption(f"Posted: {format_luxury_timestamp(job.posted_at)}")
 
 
-def jobs_filter_sidebar(jobs: list):
+def jobs_filter_sidebar(jobs: list, include_skills: bool = True):
     with st.sidebar:
         keywords = st_tags(
             label="Keyword Match", suggestions=["Data", "AI", "Langchain", "Python"]
@@ -399,14 +385,17 @@ def jobs_filter_sidebar(jobs: list):
         
         min_salary, max_salary = st.session_state.salary_range
 
-        all_tech = set()
-        for job in jobs:
-            skill_data = get_job_val(job, ["key_skills", "qualifications"], [])
-            if isinstance(skill_data, list):
-                all_tech.update(skill_data)
-        selected_tech = st.multiselect("Tech Stack", options=sorted(list(all_tech)))
+        filtered = jobs
 
-        filtered = filter_jobs_by_keywords(jobs, keywords)
+        if include_skills:
+            all_tech = set()
+            for job in jobs:
+                skill_data = get_job_val(job, ["key_skills", "qualifications"], [])
+                if isinstance(skill_data, list):
+                    all_tech.update(skill_data)
+            selected_tech = st.multiselect("Skill Stack", options=sorted(list(all_tech)))
+
+            filtered = filter_jobs_by_keywords(jobs, keywords)
 
         if selected_cities:
             filtered = [
@@ -429,12 +418,12 @@ def jobs_filter_sidebar(jobs: list):
                     [getattr(j, "schedule_type", ""), getattr(j, "work_setting", "")]
                 ))
             ]
-
-        if selected_tech:
-            filtered = [
-                j for j in filtered
-                if all(t in get_job_val(j, ["key_skills", "qualifications"], []) for t in selected_tech)
-            ]
+        if include_skills:
+            if selected_tech:
+                filtered = [
+                    j for j in filtered
+                    if all(t in get_job_val(j, ["key_skills", "qualifications"], []) for t in selected_tech)
+                ]
 
         final = []
         for j in filtered:
@@ -460,7 +449,7 @@ def scoring_weights_setting_tab(storage: LocalStorage):
     col1, col2 = st.columns(2)
     with col1:
         new_weights_map["key_skills"] = st.select_slider(
-            f"Tech Stack Importance (:blue[Currently {reversed_weight_map.get(weights.key_skills)}])",
+            f"Skill Stack Importance (:blue[Currently {reversed_weight_map.get(weights.key_skills)}])",
             options=reversed_weight_map,
             format_func=reversed_weight_map.get,
             value=weights.key_skills,
@@ -548,14 +537,14 @@ def vector_storage_setting_tab(storage: LocalStorage):
 
     if st.user and st.user.email == st.secrets.admin.root:
         st.divider()
-        st.markdown("### 👑 Admin Infrastructure Tools")
+        st.markdown("### Admin Infrastructure Tools")
         st.caption("These actions affect the shared Pinecone Index (Global).")
 
         admin_col1, admin_col2 = st.columns(2)
         
         with admin_col1:
             st.number_input("How many months?", min_value=0, format="%d")
-            if st.button("🗑️ Purge Stale Jobs", use_container_width=True, type="secondary"):
+            if st.button("Purge Stale Jobs", use_container_width=True, type="secondary"):
                 with st.spinner("Deleting old global records..."):
                     result = storage.cleanup_stale_jobs(months_old=6)
                     if result:
@@ -565,7 +554,7 @@ def vector_storage_setting_tab(storage: LocalStorage):
         
         with admin_col2:
             st.space("large")
-            if st.button("🧹 Scrub Contaminated URLs", use_container_width=True, type="secondary"):
+            if st.button("Scrub Contaminated URLs", use_container_width=True, type="secondary"):
                 with st.spinner("Scanning for ID/URL mismatches..."):
                     msg = storage.scrub_id_contaminated_urls(storage.NS_GLOBAL_JOBS)
                     st.toast(msg)
@@ -712,7 +701,7 @@ def render_settings_page():
     storage = get_local_storage()
     storage_service = st.session_state.storage_service
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["🧠 Logic", "📡 Scraping", "💾 Database", "🔑 API"]
+        ["Logic", "Scraping", "Database", "API"]
     )
     with tab1:
         scoring_weights_setting_tab(storage)
@@ -770,7 +759,7 @@ def display_profile_management(storage, active_profile):
     if not active_profile:
         return
     with st.sidebar:
-        with st.expander("⚠️ Profile Management"):
+        with st.expander("Profile Management"):
             st.warning("Deleting this profile is permanent.")
             if st.button(
                 f"Delete {active_profile['full_name']}",
@@ -784,10 +773,17 @@ def add_sidebar_support():
     with st.sidebar:
         st.markdown(
             """
-            <div style="text-align: center; padding: 0px;">
-                <p style="font-size: 0.85rem; color: #888; margin-bottom: 0px;">Enjoying the Pipeline?</p>
-                <a href="https://ko-fi.com/yourusername" target="_blank" style="padding-bottom:12px">
-                    <img src="https://ko-fi.com/img/githubbutton_sm.svg" style="height: 32px;" alt="Support me on Ko-fi" />
+            <div style="text-align: center; padding: 25px 0px; border-top: 1px solid #1C2128; margin-top: 30px;">
+                <p style="
+                    font-size: 10px; 
+                    color: #64748B; 
+                    text-transform: uppercase; 
+                    letter-spacing: 0.3em; 
+                    margin-bottom: 15px;
+                    font-family: 'Inter', sans-serif;
+                ">Enjoying The Slate?</p>
+                <a href="https://ko-fi.com/ruyzambrano" target="_blank" class="slate-support-btn">
+                    Support the Project
                 </a>
             </div>
             """,
@@ -811,14 +807,14 @@ def show_how():
     
     with col1:
         with st.container(border=True):
-            st.markdown("### 📖 New here?")
+            st.markdown("### New here?")
             st.write("Learn how the 'Auditor' logic works and what keys you'll need to get started.")
             if st.button("Read the Guide", width="stretch"):
                 st.switch_page("pages/2_about.py")
                 
     with col2:
         with st.container(border=True):
-            st.markdown("### ⚙️ Already have keys?")
+            st.markdown("### Already have keys?")
             st.write("Jump straight to the settings to input your API keys and initialize the engine.")
             if st.button("Go to Settings", type="primary", width="stretch"):
                 st.switch_page("pages/7_settings.py")

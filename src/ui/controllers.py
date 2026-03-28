@@ -26,6 +26,12 @@ def show_success_toast():
     if st.session_state.get("changed_reed"):
         st.toast("Changed Reed API Key", icon=":material/work_alert:")
         st.session_state.changed_reed = False
+    if st.session_state.get("changed_indeed"):
+        st.toast("Changed Indeed API Key", icon=":material/work_alert:")
+        st.session_state.changed_indeed = False
+    if st.session_state.get("changed_theirstack"):
+        st.toast("Changed TheirStack API Key", icon=":material/work_alert:")
+        st.session_state.changed_theirstack = False
     if st.session_state.get("updated_models"):
         st.toast("Updated Model Configuration", icon=":material/model_training:")
         st.session_state.updated_models = False

@@ -28,7 +28,7 @@ def show_specific_job():
     current_job = st.session_state.get("current_job")
     if not current_job:
         st.info(
-            "👈 Select a job from the sidebar or Home page to see the full analysis."
+            "Select a job from the sidebar or Home page to see the full analysis."
         )
         st.stop()
     with st.spinner("Fetching original job details..."):

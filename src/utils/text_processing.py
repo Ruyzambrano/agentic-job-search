@@ -2,6 +2,7 @@
 import re
 from typing import List
 from rapidfuzz import fuzz
+from datetime import datetime
 
 from src.schema import SearchStep
 
@@ -72,3 +73,31 @@ def extract_base_locations(location_str: str) -> list[str]:
             clean_cities.append(p_clean.title())
 
     return sorted(list(set(clean_cities)))
+
+
+
+def format_luxury_timestamp(date_val):
+    """
+    Standardizes any date input into: 28 March 2026 at 09:30
+    """
+    if not date_val:
+        return "Pending Audit"
+    
+    if isinstance(date_val, datetime):
+            return date_val.strftime("%d %B %Y")
+        
+    date_str = str(date_val).strip()
+
+    if "/" in date_str:
+        try:
+            date_obj = datetime.strptime(date_str, "%d/%m/%Y")
+            return date_obj.strftime("%d %B %Y")
+        except ValueError:
+            pass
+        
+    try:
+        clean_iso = date_str.replace('Z', '+00:00')
+        date_obj = datetime.fromisoformat(clean_iso)
+        return date_obj.strftime("%d %B %Y")
+    except ValueError:
+        return date_str.upper()

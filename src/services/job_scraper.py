@@ -25,7 +25,7 @@ class JobScraperService:
     async def run_research(self, queries: List[SearchStep], location: LocationData) -> RawJobMatchList:
         """Primary entry point to gather jobs from all enabled sources."""
         if not any([self.api_cfg.use_google, self.api_cfg.use_linkedin, self.api_cfg.use_reed, self.api_cfg.use_indeed, self.api_cfg.use_theirstack]):
-            print("⚠️ No scrapers enabled. Skipping search.")
+            print("No scrapers enabled. Skipping search.")
             return RawJobMatchList(jobs=[])
 
 
@@ -50,7 +50,7 @@ class JobScraperService:
             if isinstance(res, list):
                 all_jobs.extend(res)
             elif isinstance(res, Exception):
-                error(f"⚠️ Task failed during gather: {res}")
+                error(f"Task failed during gather: {res}")
 
         return self._process_and_deduplicate(all_jobs)
 

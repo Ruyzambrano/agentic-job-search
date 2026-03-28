@@ -4,7 +4,7 @@ def support_page():
     col1, col2 = st.columns([1, 2])
     
     with col2:
-        st.title("☕ Support the Project")
+        st.title("Support the Project")
         st.write("""
         Building and maintaining high-concurrency scrapers and agentic reasoning logic requires significant development time and cloud testing. 
         If this tool has helped you discover a 'hidden gem' role, consider fueling the project.

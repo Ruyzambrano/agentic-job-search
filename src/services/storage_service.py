@@ -238,7 +238,7 @@ class StorageService:
                         
                 except Exception as e:
                     if "429" in str(e):
-                        log_message("⏳ Burst limit hit. Waiting 10s to retry...")
+                        log_message("Burst limit hit. Waiting 10s to retry...")
                         sleep(10)
                         store.add_texts(texts=texts, ids=ids, metadatas=metadatas)
                     else:

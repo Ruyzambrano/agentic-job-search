@@ -1,12 +1,27 @@
 """
 Main Entry Point: Handles authentication, navigation, and global service initialization.
 """
+import base64
 
 import streamlit as st
 from st_social_media_links import SocialMediaIcons
 
 from src.ui.controllers import init_app
 from src.ui.navigation import login_screen
+
+def create_slate_logo():
+    return  """<svg width="250" height="60" viewBox="0 0 250 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="8" height="40" rx="1.5" fill="#C5A267"/>
+        <rect x="25" y="18" width="20" height="7" rx="1.5" fill="#C5A267" fill-opacity="1.0"/>
+        <rect x="25" y="30" width="20" height="7" rx="1.5" fill="#C5A267" fill-opacity="0.7"/>
+        <rect x="25" y="42" width="12" height="7" rx="1.5" fill="#C5A267" fill-opacity="0.4"/>
+        <text x="60" y="42" fill="#C5A267" style="font: 400 28px 'Playfair Display', serif; letter-spacing: 0.1em;">THE SLATE</text>
+    </svg>"""
+
+def apply_slate_logo(logo: str):
+    b64 = base64.b64encode(logo.encode()).decode()
+    logo_url = f"data:image/svg+xml;base64,{b64}"
+    st.logo(logo_url, icon_image=logo_url, size="large")
 
 def apply_refined_luxury_theme():
     st.markdown("""
@@ -90,11 +105,38 @@ def apply_refined_luxury_theme():
                 background: linear-gradient(90deg, transparent, #4A4031, transparent) !important;
                 opacity: 0.5;
             }
+            .slate-support-btn {
+                display: inline-block;
+                padding: 8px 20px;
+                border: 1px solid #C5A267 !important;
+                border-radius: 2px !important;
+                color: #C5A267 !important;
+                font-family: 'Inter', sans-serif !important;
+                font-size: 11px !important;
+                font-weight: 600 !important;
+                letter-spacing: 0.12em !important;
+                text-transform: uppercase !important;
+                text-decoration: none !important;
+                background-color: transparent !important;
+                transition: all 0.4s ease-in-out !important;
+            }
+
+            .slate-support-btn:hover {
+                background-color: rgba(197, 162, 103, 0.15) !important;
+                box-shadow: 0 0 15px rgba(197, 162, 103, 0.2) !important;
+                border-color: #E2E8F0 !important; /* Slight shift to silver-gold on hover */
+                color: #E2E8F0 !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    st.set_page_config(page_title="Agentic Job Auditor", page_icon="🤖", layout="wide")
+    slate_logo = create_slate_logo()
+    st.set_page_config(
+        page_title="THE SLATE",
+        layout="wide"
+    )
+    apply_slate_logo(slate_logo)
     apply_refined_luxury_theme()
     if not st.user.is_logged_in:
         login_screen()
@@ -103,24 +145,24 @@ if __name__ == "__main__":
         pages = {
             "Jobs":
                 [
-                    st.Page(page="pages/1_home.py", title="Home", icon="🏠", default=True),
-                    st.Page(page="pages/3_all_jobs.py", title="Your Matches", icon="🎯"),
-                    st.Page(page="pages/4_job_view.py", title="Job Analysis", icon="🔬"),
+                    st.Page(page="pages/1_home.py", title="Home", default=True),
+                    st.Page(page="pages/3_all_jobs.py", title="Your Matches"),
+                    st.Page(page="pages/4_job_view.py", title="Job Analysis"),
                 ],
             "Global": 
                 [
-                    st.Page(page="pages/5_global_jobs.py", title="Global Library", icon="🌐"),
-                    st.Page(page="pages/6_market_views.py", title="Market Trends", icon="📊")
+                    st.Page(page="pages/5_global_jobs.py", title="Global Library"),
+                    st.Page(page="pages/6_market_views.py", title="Market Trends")
                 ],
             "Settings": 
                 [
-                    st.Page(page="pages/2_about.py", title="About", icon="ℹ️"),
-                    st.Page(page="pages/7_settings.py", title="Pipeline Settings", icon="⚙️"),
-                    st.Page(page="pages/8_logout.py", title="Log out", icon="🚪")
+                    st.Page(page="pages/2_about.py", title="About",),
+                    st.Page(page="pages/7_settings.py", title="Pipeline Settings"),
+                    st.Page(page="pages/8_logout.py", title="Log out")
                 ],
             "Support the Project":
                 [
-                    st.Page(page="pages/9_support.py", title="Buy Me a Coffee", icon="☕️")
+                    st.Page(page="pages/9_support.py", title="Buy Me a Coffee")
                 ]
         }
 
@@ -138,7 +180,6 @@ if __name__ == "__main__":
             "https://linkedin.com/in/ruy-zambrano",
             "https://ko-fi.com/ruyzambrano"
         ],
-        # GitHub: Slate Silver | LinkedIn: Gold Dust | Ko-fi: Warm Bronze
         colors=["#94A3B8","#78909C", "#C5A267"]
     )
 

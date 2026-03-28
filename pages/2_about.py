@@ -1,7 +1,7 @@
 import streamlit as st
 
 def about_page():
-    st.title("📖 About the Pipeline")
+    st.title("About the Pipeline")
     st.markdown("""
     **AI Career Matcher** is a high-tenacity, state-driven research agent designed to automate the heavy lifting of job discovery and seniority auditing. 
 
@@ -10,7 +10,7 @@ def about_page():
 
     st.divider()
 
-    st.header("🛠️ Infrastructure & Setup")
+    st.header("Infrastructure & Setup")
     st.info("""
     **Bring Your Own Key:** This system is entirely client-side. Your CV data and search quotas remain private and dedicated to your research.
     """)
@@ -19,7 +19,7 @@ def about_page():
 
     with col_llm:
         with st.container(border=True, height="stretch"):
-            st.subheader("🧠 LLM & Analysis")
+            st.subheader("LLM & Analysis")
             st.markdown("""
             You can use **Gemini, Claude, or OpenAI**.
             
@@ -31,7 +31,7 @@ def about_page():
 
     with col_pine:
         with st.container(border=True, height="stretch"):
-            st.subheader("💾 Managed Storage")
+            st.subheader("Managed Storage")
             st.markdown("""
             **Secure Vector Vault**
             
@@ -47,7 +47,7 @@ def about_page():
 
     with col_search:
         with st.container(border=True, height="stretch"):
-            st.subheader("🔍 Global Search")
+            st.subheader("Global Search")
             st.markdown("""
             **SerpAPI and RapidAPI**
             - [SerpAPI](https://serpapi.com/): 100 free searches/mo.
@@ -57,7 +57,7 @@ def about_page():
 
     with col_specialist:
         with st.container(border=True, height="stretch"):
-            st.subheader("🇬🇧 UK Specialist")
+            st.subheader("UK Specialist")
             st.markdown("""
             **Reed.co.uk**
             Direct access to the UK's largest professional job board. 
@@ -71,7 +71,7 @@ def about_page():
 
     with col_agg:
         with st.container(border=True, height=400):
-            st.subheader("🌐 Market Aggregator")
+            st.subheader("Market Aggregator")
             st.markdown("""
             **TheirStack API**
             The "Master Key" for the global market. Aggregates listings from LinkedIn, Indeed, and 300k+ company career pages into a single structured feed.
@@ -85,7 +85,7 @@ def about_page():
 
     with col_direct:
         with st.container(border=True, height=400):
-            st.subheader("🎯 Direct Scraping")
+            st.subheader("Direct Scraping")
             st.markdown("""
             **HasData (Indeed Specialist)**
             Used to bypass 429 rate-limits on Indeed via high-tenacity proxy rotation and headless browsers.
@@ -97,7 +97,7 @@ def about_page():
             """)
             st.caption("Usage: Best for \"Day 1\" Indeed postings and raw-text extraction.")
     st.divider()
-    st.header("🚀 The 'Auditor' Philosophy")
+    st.header("The 'Auditor' Philosophy")
     st.markdown("""
     Unlike standard "keyword matchers," this pipeline employs a **Seniority Auditor** logic. When the system analyzes a job, it performs a mathematical check on your career timeline:
     

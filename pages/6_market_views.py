@@ -40,7 +40,7 @@ def display_dashboard(profiles: list, jobs: list):
 
     df_j, df_p = engine.get_filtered_data(work_settings, seniorities)
 
-    st.markdown("### ⚡ Market Snapshot")
+    st.markdown("### Market Snapshot")
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
     with kpi1:
@@ -62,7 +62,7 @@ def display_dashboard(profiles: list, jobs: list):
     st.divider()
 
     tab_financials, tab_skills, tab_geo = st.tabs(
-        ["💰 Salary Benchmarking", "🧠 Skill Gap Analysis", "📍 Geographic Dynamics"]
+        ["Salary Benchmarking", "Skill Gap Analysis", "Geographic Dynamics"]
     )
 
     with tab_financials:
@@ -77,7 +77,7 @@ def display_dashboard(profiles: list, jobs: list):
                 st.write(f"**Median:** £{stats['50%']/1000:,.0f}k")
                 st.write(f"**Entry Level:** £{stats['25%']/1000:,.0f}k")
                 st.info(
-                    "💡 **Insights:** Target the 75th percentile for high-leverage negotiations."
+                    "**Insights:** Target the 75th percentile for high-leverage negotiations."
                 )
             else:
                 st.write("No salary data available for selected filters.")
@@ -98,7 +98,7 @@ def display_dashboard(profiles: list, jobs: list):
                     [f"`{s}`" for s in missing_skills["skill"].tolist()]
                 )
                 st.warning(
-                    f"⚠️ **Upskilling Opportunity:** Undersupplied in: {skills_list}"
+                    f"**Upskilling Opportunity:** Undersupplied in: {skills_list}"
                 )
         else:
             st.info("No skill overlap data available yet.")
@@ -113,7 +113,7 @@ def display_dashboard(profiles: list, jobs: list):
             st.altair_chart(create_location_salary_chart(df_j), width="stretch")
 
     st.divider()
-    st.subheader("🕵️ Talent Persona Scout")
+    st.subheader("Talent Persona Scout")
     st.caption("Anonymized snapshots of candidate profiles in the current pool.")
 
     persona_cols = st.columns(3)
@@ -128,7 +128,7 @@ def display_dashboard(profiles: list, jobs: list):
                 st.markdown(f"**{row['seniority_level']} {primary_title}**")
 
                 st.caption(
-                    f"📍 {row['current_location']} · 🏠 {row.get('work_preference', 'Hybrid')}"
+                    f"{row['current_location']} · {row.get('work_preference', 'Hybrid')}"
                 )
 
                 years = row.get("years_of_experience", 0)
@@ -147,7 +147,7 @@ def main():
         profiles, jobs = get_cached_market_data(storage, st.session_state.last_updated)
 
     if not jobs or not profiles:
-        st.title("📊 Market Insights")
+        st.title("Market Insights")
         st.info(
             "Gathering more market data... Upload a CV or wait for global job syncing to unlock this dashboard."
         )
