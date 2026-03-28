@@ -1,16 +1,71 @@
+import base64
+
 import streamlit as st
+
 from src.ui.streamlit_cache import get_cv_text
-from src.ui.components import display_profile
 from src.ui.streamlit_cache import get_cached_user_profiles
-from src.schema import CandidateProfile
 
 def login_screen():
-    """Renders the initial authentication interface."""
-    with st.container(border=True):
-        st.title("Agentic Job Auditor")
-        st.subheader("Login to access your personalized job research")
-        st.button("Log in with Google", on_click=st.login, use_container_width=True)
+    """Renders the high-fidelity Slate authentication interface."""
+    
+    try:
+        with open("assets/icon.svg", "rb") as f:
+            icon_b64 = base64.b64encode(f.read()).decode()
+            icon_url = f"data:image/svg+xml;base64,{icon_b64}"
+    except FileNotFoundError:
+        icon_url = "" 
+    _, center_col, _ = st.columns([1, 2, 1])
 
+    with center_col:
+        st.markdown(f"""
+            <div style="text-align: center; padding: 40px 0px;">
+                <img src="{icon_url}" width="80" style="margin-bottom: 20px;">
+                <h1 style="
+                    font-family: 'Playfair Display', serif; 
+                    color: #C5A267; 
+                    font-size: 32px; 
+                    letter-spacing: 0.15em;
+                    margin-bottom: 10px;
+                ">THE SLATE</h1>
+                <h2 style="
+                    font-family: 'Playfair Display', serif; 
+                    color: #8A847A; 
+                    font-size: 20px; 
+                    letter-spacing: 0.1em;
+                    margin-top: 5px;
+                    margin-bottom: 30px;
+                    font-weight: 400;
+                ">Job Curator</h2>
+                <p style="
+                    font-family: 'Inter', sans-serif; 
+                    color: #64748B; 
+                    font-size: 10px; 
+                    letter-spacing: 0.4em; 
+                    text-transform: uppercase;
+                    margin-bottom: 40px;
+                ">System Authentication Required</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        with st.container(border=True):
+            st.markdown("""
+                <p style='font-size: 13px; color: #E2E8F0; text-align: center; margin-bottom: 20px;'>
+                    Authorize with your Google identity to access the research pipeline.
+                </p>
+            """, unsafe_allow_html=True)
+            
+            st.button(
+                "Log In via Google", 
+                on_click=st.login, 
+                use_container_width=True,
+                type="primary"
+            )
+
+        st.markdown("""
+            <p style='text-align: center; color: #1C2128; font-size: 9px; margin-top: 20px; letter-spacing: 0.1em;'>
+                PRIVATE INTELLIGENCE // ENCRYPTION ACTIVE
+            </p>
+        """, unsafe_allow_html=True)
 
 def sidebar_handler():
     """
