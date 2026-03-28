@@ -48,13 +48,13 @@ def get_anthropic_text_models(models: list, free_tier: bool = False):
         caps = m.get("capabilities", {})
 
         if caps.get("thinking", {}).get("supported"):
-            label += " | 🧠 (Thinking Mode)"
+            label += " | Thinking Mode"
         
         if "haiku" in model_id:
-            label += " | ⚡ (Fast & Cheap)"
+            label += " | Fast & Cheap"
             
         if "opus" in model_id:
-            label += " | 🏆 (SOTA Reasoning)"
+            label += " | SOTA Reasoning"
 
         suitable_models.append({"id": model_id, "label": label})
 
@@ -84,19 +84,19 @@ def get_all_gemini_models(api_key: str = None, free_tier: bool = False):
         return [
             {
                 "id": "gemini-2.5-flash",
-                "label": "Gemini 2.5 Flash | ⚡ (Fast)",
+                "label": "Gemini 2.5 Flash | Fast",
             },
             {
                 "id": "gemini-2.5-flash-lite",
-                "label": "Gemini 2.5 Flash Lite | ⚡ (Lite)",
+                "label": "Gemini 2.5 Flash Lite | Fast",
             },
             {
                 "id": "gemini-3-flash-preview",
-                "label": "Gemini 3 Flash Preview | 🧠 (Deep Reasoning)",
+                "label": "Gemini 3 Flash Preview | Deep Reasoning",
             },
             {
                 "id": "gemini-3.1-flash-lite-preview",
-                "label": "Gemini 3.1 Flash Lite | 🧠 (Deep Reasoning) | ⚡ (Lite)"
+                "label": "Gemini 3.1 Flash Lite | Deep Reasoning | Lite"
             }
         ]
     try:
@@ -122,11 +122,11 @@ def get_gemini_text_models(models: list, free_tier: bool = False):
         label = model_id
 
         if getattr(m, "thinking", False):
-            label += " | 🧠 (Deep Reasoning)"
+            label += " | Deep Reasoning"
         if "flash" in model_id:
-            label += " | ⚡ (Fast)"
+            label += " | Fast"
         if "pro" in model_id:
-            label += " | ✨ (Premium)"
+            label += " | Premium"
 
         suitable_models.append({"id": model_id, "label": label})
 

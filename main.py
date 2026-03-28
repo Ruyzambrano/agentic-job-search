@@ -30,11 +30,11 @@ async def run_job_matcher(raw_context: str, config: dict, models: dict) -> dict:
         "active_profile_id": config["configurable"].get("active_profile_id"),
     }
 
-    log_message("🚀 Launching Agentic Workflow...")
+    log_message("Launching Agentic Workflow...")
 
     final_state = await app.ainvoke(initial_state, config=config)
 
-    log_message("✅ Workflow execution finished.")
+    log_message("Workflow execution finished.")
     return final_state
 
 

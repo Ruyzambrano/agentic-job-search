@@ -11,7 +11,7 @@ from src.schema import RawJobMatch
 def global_job_list():
     storage = st.session_state.storage_service
 
-    st.title("🌐 Global Job Library")
+    st.title("Global Job Library")
     st.write("Browse the master list of all jobs currently indexed in the system.")
 
     with st.spinner("Loading global index..."):
@@ -27,7 +27,7 @@ def global_job_list():
             "The global library is empty. Run a search on the Home page to populate it!"
         )
     else:
-        filtered_jobs = jobs_filter_sidebar(jobs)
+        filtered_jobs = jobs_filter_sidebar(jobs, False)
 
         if not filtered_jobs:
             st.warning("No jobs match your current filters.")

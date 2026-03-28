@@ -19,7 +19,7 @@ def all_jobs_page():
         label="Sort by", options=["Score", "Analysis Date", "Company", "Role"]
     )
 
-    st.title("📂 All Market Matches")
+    st.title("All Market Matches")
     st.write("Browse every job analysis generated across all your uploaded CVs.")
     with st.spinner("Loading your career library..."):
         all_matches = get_cached_all_jobs_for_user(storage, user_id, st.session_state.last_updated)

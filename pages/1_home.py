@@ -28,7 +28,7 @@ def handle_research_actions(cv_placeholder):
     """Logic for triggering the actual AI Agent runs."""
     if st.session_state.get("raw_cv_text"):
         if cv_placeholder.button("Search with your new CV", type="primary", width="stretch"):
-            with st.status("🤖 Analyzing CV...", expanded=True) as status:
+            with st.status("Analyzing CV...", expanded=True) as status:
                 geo_obj = resolve_location(st.session_state.loc, st.session_state.loc)
                 result = process_new_cv(st.session_state.raw_cv_text, st.session_state.desired_role, geo_obj)
                 st.session_state.active_profile = loads(result).get("cv_data")
@@ -38,10 +38,10 @@ def handle_research_actions(cv_placeholder):
             
 
     if st.session_state.active_profile:
-        if st.button(f"🔍 Search Market for {st.session_state.desired_role} roles in {st.session_state.loc}", use_container_width=True):
+        if st.button(f"Search Market for {st.session_state.desired_role} roles in {st.session_state.loc}", use_container_width=True):
             with st.spinner("Geo-locating..."):
                 geo_data = resolve_location(st.session_state.loc, st.session_state.loc)
-            with st.status("📡 Scraping & Auditing...", expanded=False) as status:
+            with st.status("Scraping & Auditing...", expanded=False) as status:
                 search_for_new_jobs(st.session_state.active_profile, st.user.sub, geo_data)
                 status.update(label="Complete!", state="complete")
             st.session_state.last_updated = datetime.now().timestamp()
@@ -58,25 +58,25 @@ def home_page():
 
     cv_alert_area = render_sidebar(storage, user_id)
 
-    st.title("🚀 Career Discovery Dashboard")
+    st.title("Your Curated Job Search")
     
-    handle_research_actions(cv_alert_area)
+    
 
     if st.session_state.active_profile:
         display_profile(st.session_state.active_profile)
-        
+        handle_research_actions(cv_alert_area)
         if getattr(api_settings, "free_tier"):
             st.warning(f"Throttling enabled for {api_settings.ai_provider} Free Tier.")
 
         st.divider()
         render_results_section(storage)
     else:
-        st.info("👋 Welcome! Please upload a CV or select a profile to begin.")
-
+        st.info("Welcome! Please upload a CV or select a profile to begin.")
+    
 def render_results_section(storage):
     """Handles sorting logic and the job grid."""
     header_col, sort_col = st.columns([3, 1])
-    header_col.subheader("🎯 Top Market Matches")
+    header_col.subheader("Top Market Matches")
     sort_by = sort_col.selectbox("Sort by", options=["Score", "Date", "Company"], label_visibility="collapsed")
     raw_matches = get_cached_profile_matches(storage, st.session_state.active_profile, st.session_state.last_updated)
     if raw_matches:

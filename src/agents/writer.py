@@ -27,7 +27,7 @@ def create_writer_agent(writer_llm, free_tier: bool = False):
 
 ### YOUR MANDATE
 1. ANALYZE EVERY JOB: You must return an analysis for EVERY job provided in the input list. Do not truncate the list. Do not focus only on the "best" ones.
-2. BE HYPER-CRITICAL: Your Match Score must be conservative. A 95%+ score should be reserved for candidates who meet 100% of the tech stack AND seniority requirements. 
+2. BE HYPER-CRITICAL: Your Match Score must be conservative. A 95%+ score should be reserved for candidates who meet 100% of the skill stack AND seniority requirements. 
 3. DETECT OVER-QUALIFICATION/UNDER-QUALIFICATION: If a candidate has 10 years of experience and the job is "Junior," the score should be LOW due to "Retention Risk."
 
 ### ANALYSIS CRITERIA
@@ -87,7 +87,7 @@ async def writer_node(state: AgentState, config: RunnableConfig) -> Dict[str, An
     )
 
     if not jobs_to_process:
-        log_message("🚀 All jobs retrieved from cache.")
+        log_message("All jobs retrieved from cache.")
         final_analyses_meta = [AnalysedJobMatchWithMeta(**j.model_dump()) for j in final_analyses]
         return {"writer_data": AnalysedJobMatchListWithMeta(jobs=final_analyses_meta)}
 
@@ -193,5 +193,5 @@ async def _analyze_chunk(chunk, agent, state, semaphore, settings) -> List[Any]:
             structured_data = response.get("structured_response") or response
             return structured_data.jobs if hasattr(structured_data, 'jobs') else []
         except Exception as e:
-            log_message(f"⚠️ Analysis Error: {str(e)[:100]}")
+            log_message(f"Analysis Error: {str(e)[:100]}")
             return []
