@@ -138,7 +138,7 @@ def main():
     )
     apply_slate_logo(slate_logo)
     apply_refined_luxury_theme()
-    if not st.user.is_logged_in:
+    if not st.user.get("is_logged_in"):
         login_screen()
         return
     else:

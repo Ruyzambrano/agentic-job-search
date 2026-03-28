@@ -31,3 +31,4 @@ geopy
 html2text
 st-social-media-links 
 anthropic
+streamlit[auth]
