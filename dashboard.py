@@ -130,7 +130,7 @@ def apply_refined_luxury_theme():
         </style>
     """, unsafe_allow_html=True)
 
-if __name__ == "__main__":
+def main():
     slate_logo = create_slate_logo()
     st.set_page_config(
         page_title="THE SLATE",
@@ -140,6 +140,7 @@ if __name__ == "__main__":
     apply_refined_luxury_theme()
     if not st.user.is_logged_in:
         login_screen()
+        return
     else:
         init_app()
         pages = {
@@ -184,3 +185,6 @@ if __name__ == "__main__":
     )
 
     social_media_icons.render(sidebar=False)
+
+if __name__ == "__main__":
+    main()
