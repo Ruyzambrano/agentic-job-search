@@ -7,6 +7,16 @@ from src.ui.streamlit_cache import get_cached_user_profiles
 
 def login_screen():
     """Renders the high-fidelity Slate authentication interface."""
+    st.markdown("""
+        <style>
+            [data-testid="stSidebar"] {
+                display: none;
+            }
+            [data-testid="stSidebarNav"] {
+                display: none;
+            }
+        </style>
+    """, unsafe_allow_html=True)
     
     try:
         with open("assets/icon.svg", "rb") as f:
