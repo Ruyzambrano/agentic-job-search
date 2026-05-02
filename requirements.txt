@@ -7,7 +7,7 @@ langgraph
 langchain-core
 langchain-community
 langchain-google-genai
-langchain-chroma
+# langchain-chroma
 ipykernel
 rich
 markitdown[all]
@@ -15,9 +15,9 @@ pytest
 pytest-asyncio
 pytest-mock
 pytest-icdiff
-streamlit
+streamlit==1.56.0
 altair
-Authlib
+Authlib==1.6.11
 streamlit-tags
 pytest-asyncio
 respx
