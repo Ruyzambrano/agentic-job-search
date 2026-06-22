@@ -224,7 +224,7 @@ class ApiSettings(BaseModel):
 
     use_google: bool = False
     use_linkedin: bool = False
-    use_reed: bool = False
+    use_reed: bool = True
     use_indeed: bool = False
     use_theirstack: bool = False
     free_tier: bool = True

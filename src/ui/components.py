@@ -597,12 +597,12 @@ def render_api_settings(storage: LocalStorage):
     with col1:
         with st.container(border=True):
             new_use_reed = st.toggle("Enable Reed", value=api.use_reed)
-            new_reed_key = st.text_input(
-                "Reed API Key",
-                type="password",
-                value=api.reed_key,
-                disabled=not new_use_reed,
-            ).strip()
+            # new_reed_key = st.text_input(
+            #     "Reed API Key",
+            #     type="password",
+            #     value=api.reed_key,
+            #     disabled=not new_use_reed,
+            # ).strip()
 
         with st.container(border=True):
             new_use_google = st.toggle("Enable Google (SerpAPI)", value=api.use_google)
@@ -655,9 +655,9 @@ def render_api_settings(storage: LocalStorage):
         st.session_state.changed_rapid_api = set_new_key(
             "rapidapi_key", new_rapidapi_key, storage, "api_settings"
             )
-        st.session_state.changed_reed = set_new_key(
-            "reed_key", new_reed_key, storage, "api_settings"
-        )
+        # st.session_state.changed_reed = set_new_key(
+        #     "reed_key", new_reed_key, storage, "api_settings"
+        # )
         st.session_state.changed_indeed = set_new_key(
             "indeed_key", new_hasdata_key, storage, "api_settings"
         )
@@ -701,15 +701,15 @@ def render_settings_page():
     storage = get_local_storage()
     storage_service = st.session_state.storage_service
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["Logic", "Scraping", "Database", "API"]
+        ["API", "Scraping", "Database", "Logic"]
     )
-    with tab1:
+    with tab4:
         scoring_weights_setting_tab(storage)
     with tab2:
         scraping_settings_tab(storage)
     with tab3:
         vector_storage_setting_tab(storage_service)
-    with tab4:
+    with tab1:
         render_api_settings(storage)
 
 
@@ -792,12 +792,12 @@ def add_sidebar_support():
 
 def show_how():
     """Redirects users to setup or info pages if keys are missing."""
-    st.image("https://img.icons8.com/layers/100/000000/empty-box.png", width=100)
+    st.image("assets/slate_full_logo.svg")
     st.title("Ready to start your research?")
-    st.subheader("The pipeline is currently dormant.")
+
     
     st.info("""
-    **Notice:** This is a **Bring Your Own Key (BYOK)** tool. 
+    This is a **Bring Your Own Key (BYOK)** tool. 
     To protect your privacy and ensure dedicated performance, you must provide your own LLM and Search API keys.
     """)
 

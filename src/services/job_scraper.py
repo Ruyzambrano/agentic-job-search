@@ -1,8 +1,7 @@
 import asyncio
-import re
 import httpx
 from typing import List, Dict, Any, Optional
-from logging import info, error
+from logging import error
 from datetime import datetime
 
 from src.schema import RawJobMatchList, RawJobMatch, PipelineSettings, WorkSetting, SeniorityLevel, SearchStep, LocationData
