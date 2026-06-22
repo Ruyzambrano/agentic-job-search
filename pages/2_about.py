@@ -15,7 +15,8 @@ def about_page():
     **Bring Your Own Key:** This system is entirely client-side. Your CV data and search quotas remain private and dedicated to your research.
     """)
 
-    col_llm, col_pine = st.columns(2)
+    col_llm, col_specialist = st.columns(2)
+    col_search, col_pine  = st.columns(2)
 
     with col_llm:
         with st.container(border=True, height="stretch"):
@@ -43,11 +44,11 @@ def about_page():
             """)
             st.caption("Status: Managed Infrastructure (No key required)")
 
-    col_search, col_specialist = st.columns(2)
+    
 
     with col_search:
         with st.container(border=True, height="stretch"):
-            st.subheader("Global Search")
+            st.subheader("Optional: Global Search")
             st.markdown("""
             **SerpAPI and RapidAPI**
             - [SerpAPI](https://serpapi.com/): 100 free searches/mo.
