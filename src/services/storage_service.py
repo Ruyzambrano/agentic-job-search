@@ -1,4 +1,4 @@
-"""Storage Service: Handles all vector database persistence and retrieval."""
+"""Storage Service: Handles all vector database persistence and retrieval, integrated with Supabase Tiers."""
 from time import sleep
 from datetime import datetime, timezone, timedelta
 from json import loads, dumps, JSONDecodeError
@@ -21,19 +21,62 @@ from src.utils.func import log_message
 
 class StorageService:
     def __init__(self, index_name: str, embeddings: Any):
-        """
-        Initializes the service.
-        """
+        """Initializes both Vector Engine and Supabase Account Store Core."""
         self.index_name = index_name
         self.embeddings = embeddings
         self.NS_USER_DATA = "user_job_analyses"
         self.NS_GLOBAL_JOBS = "global_raw_jobs"
         self.NS_ANALYSES = "user_job_analyses"
+        
+        # 1. Init Pinecone Engine
         self.pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
         try: 
             self.pc.list_indexes()
         except Exception as e:
             raise ConnectionError(f"Pinecone authentication error: {str(e)}")
+
+        # 2. Init Supabase SQL Client
+        try:
+            self.supabase: Client = create_client(
+                st.secrets["SUPABASE_URL"],
+                st.secrets["SUPABASE_KEY"]
+            )
+        except Exception as e:
+            raise ConnectionError(f"Supabase connection initialization failure: {str(e)}")
+
+    def get_user_tier(self, user_id: str) -> str:
+        """
+        SOP: Reads real-time subscription access boundaries straight from Postgres.
+        The underlying value is maintained independently by our live Stripe Webhook.
+        """
+        try:
+            response = (
+                self.supabase.table("profiles")
+                .select("tier")
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+            )
+            if response.data:
+                return response.data.get("tier", "trial")
+            return "trial" # Fallback if user profile mapping hasn't initialized
+        except Exception as e:
+            log_message(f"⚠️ Failed to pull user tier: {e}. Defaulting to Trial limitations.")
+            return "trial"
+
+    def check_user_generation_allowance(self, user_id: str) -> bool:
+        """
+        Guardrail check to verify if a user has hit plan allowances.
+        Enforces a hard limit of 3 profiles for Trial tiers.
+        """
+        tier = self.get_user_tier(user_id)
+        if tier == "pro":
+            return True # Unlimited tier access
+
+        existing_count = len(self.find_all_candidate_profiles(user_id))
+        if existing_count >= 3:
+            return False
+        return True
 
     def _get_store(self, namespace: str) -> PineconeVectorStore:
         """Internal helper to create a LangChain Pinecone store instance."""
@@ -42,7 +85,10 @@ class StorageService:
         )
 
     def save_candidate_profile(self, user_id: str, profile: CandidateProfile) -> str:
-        """Saves a new CV profile with the required document_type tag."""
+        """Saves a new CV profile with subscription allowance safety checking."""
+        if not self.check_user_generation_allowance(user_id):
+            raise PermissionError("❌ Free account profile maximum (3) reached. Please upgrade to Pro.")
+
         profile_id = (
             f"profile_{user_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         )
@@ -289,10 +335,7 @@ class StorageService:
     def find_job_matches_for_profile(
         self, profile: dict
     ) -> List[AnalysedJobMatchWithMeta]:
-        """
-        SOP: Fetches all analysed job results for a specific profile ID.
-        Uses the 3072-dimension dummy vector and filters by document_type.
-        """
+        """SOP: Fetches analysed job results filtering by document_type."""
         try:
             summary = profile.get("summary")
             profile_id = profile.get("profile_id")
@@ -330,9 +373,7 @@ class StorageService:
             return []
 
     def delete_current_profile(self, profile_id: str):
-        """
-        SOP: Deletes a specific profile vector from the user data namespace.
-        """
+        """Deletes a specific profile vector from user data namespace."""
         try:
             store = self._get_store(self.NS_USER_DATA)
             index = store.get_pinecone_index(self.index_name)
@@ -343,10 +384,7 @@ class StorageService:
             return False
 
     def find_all_jobs_for_user(self, user_id: str) -> List[AnalysedJobMatchWithMeta]:
-        """
-        SOP: Fetches every job analysis vector belonging to a user ID.
-        Ignores profile_id to give a 'Global' view of the user's market matches.
-        """
+        """Fetches every job analysis vector belonging to a user ID."""
         try:
             store = self._get_store(self.NS_USER_DATA)
             index = store.get_pinecone_index(self.index_name)
@@ -381,16 +419,11 @@ class StorageService:
             return []
 
     def find_raw_job_by_url(self, job_url: str) -> Optional[RawJobMatch]:
-        """
-        Retrieves the original raw job data from the global namespace.
-        Uses the job_url as the filter.
-        """
+        """Retrieves original raw job data from the global namespace."""
         try:
             job_id = generate_safe_id(job_url)
-            
             store = self._get_store(self.NS_GLOBAL_JOBS)
             index = store.get_pinecone_index(self.index_name)
-            
             response = index.fetch(ids=[job_id], namespace=self.NS_GLOBAL_JOBS)
             
             if response and job_id in response.vectors:
@@ -406,15 +439,13 @@ class StorageService:
 
             if getattr(results, "matches"):
                 return self._parse_cached_job(results["matches"][0]["metadata"])
-            
             return None
-
         except Exception as e:
             st.error(f"Error fetching raw job: {e}")
             return None
 
     def get_all_global_jobs(self, limit: int = 100) -> List[RawJobMatch]:
-        """Retrieves raw job data using the hashed ID (O(1) lookup)."""
+        """Retrieves raw job data using the hashed ID."""
         try:
             store = self._get_store(self.NS_GLOBAL_JOBS)
             index = store.get_pinecone_index(self.index_name)
@@ -428,7 +459,6 @@ class StorageService:
             jobs = []
             for match in results.get("matches", []):
                 meta = match.get("metadata", {})
-                
                 list_fields = ["benefits", "responsibilities", "qualifications", "key_skills", "attributes"]
                 
                 for field in list_fields:
@@ -482,21 +512,16 @@ class StorageService:
         return profiles, jobs
     
     def cleanup_stale_jobs(self, months_old: int = 6):
-        """
-        SOP: Purges jobs older than X months from the global library.
-        Requires 'analysed_at' metadata field to be present.
-        """
+        """Purges jobs older than X months from global library."""
         try:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=months_old * 30)
             cutoff_ts = int(cutoff_date.timestamp())
 
             index = self._get_store(self.NS_GLOBAL_JOBS).get_pinecone_index(self.index_name)
-
             delete_response = index.delete(
                 filter={"analysed_at": {"$lt": cutoff_ts}},
                 namespace=self.NS_GLOBAL_JOBS
             )
-            
             st.success(f"Cleanup complete! Removed jobs older than {cutoff_date.date()}.")
             return delete_response
         except Exception as e:
@@ -510,32 +535,25 @@ class StorageService:
             ids_to_delete = []
 
             for ids_batch in index.list(namespace=namespace):
-                
                 sub_batch_size = 50
                 for i in range(0, len(ids_batch), sub_batch_size):
                     sub_group = ids_batch[i : i + sub_batch_size]
-                    
                     fetch_results = index.fetch(ids=sub_group, namespace=namespace)
                     vectors = fetch_results.vectors if hasattr(fetch_results, 'vectors') else {}
                     
                     for record_id, vector_obj in vectors.items():
                         metadata = vector_obj.metadata if hasattr(vector_obj, 'metadata') else None
-                        
-                        if metadata:
-                            if metadata.get("document_type") == "job_analysis":
-                                url = str(metadata.get('job_url', ""))
-
-                                if not url.startswith("http") or "://" not in url or url == record_id:
-                                    ids_to_delete.append(record_id)
+                        if metadata and metadata.get("document_type") == "job_analysis":
+                            url = str(metadata.get('job_url', ""))
+                            if not url.startswith("http") or "://" not in url or url == record_id:
+                                ids_to_delete.append(record_id)
 
             if ids_to_delete:
                 for i in range(0, len(ids_to_delete), 1000):
                     batch = ids_to_delete[i : i + 1000]
                     index.delete(ids=batch, namespace=namespace)
                 return f"Cleaned {len(ids_to_delete)} records."
-            
             return "Index is already clean."
-
         except Exception as e:
             return f"Scrub failed: {str(e)}"
 
@@ -544,9 +562,7 @@ class StorageService:
         try:
             index = self.pc.Index(self.index_name)
             stats = index.describe_index_stats()
-            
             namespaces = stats.get("namespaces", {})
-            
             return {
                 "global_count": namespaces.get(self.NS_GLOBAL_JOBS, {}).get("vector_count", 0),
                 "analysis_count": namespaces.get(self.NS_USER_DATA, {}).get("vector_count", 0),
