@@ -62,7 +62,7 @@ def about_page():
             **Reed.co.uk**
             Direct access to the UK's largest professional job board. 
             
-            **Setup:** Request a free API key at the [Reed Developer Portal](https://www.reed.co.uk/developers/). Provides 1000+ searches each month.
+            **Setup:** Reed is already set up by default
             """)
             st.caption("Best for: Exacting London/UK matches.")
     
