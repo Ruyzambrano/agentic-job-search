@@ -7,7 +7,7 @@ langgraph
 langchain-core
 langchain-community
 langchain-google-genai
-# langchain-chroma
+supabase
 ipykernel
 rich
 markitdown[all]

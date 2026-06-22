@@ -759,8 +759,8 @@ def display_profile_management(storage, active_profile):
     if not active_profile:
         return
     with st.sidebar:
-        with st.expander("Profile Management"):
-            st.warning("Deleting this profile is permanent.")
+        with st.expander("CV Management"):
+            st.warning("Deleting this CV is permanent.")
             if st.button(
                 f"Delete {active_profile['full_name']}",
                 use_container_width=True,

@@ -9,6 +9,7 @@ from src.ui.streamlit_cache import (
 from src.core.embeddings_handler import validate_and_get_models, get_embeddings
 from src.utils.func import get_provider_config, get_model_roles, ModelTypeError
 from src.utils.model_functions import get_gemini_text_models, get_model_index, get_all_anthropic_models, get_anthropic_text_models
+from src.services.database import SupabaseStorage
 
 def show_success_toast():
     if st.session_state.get("changed_api_key"):
@@ -62,6 +63,9 @@ def init_app():
             st.session_state.storage_service = get_storage_service(embeddings, st.session_state.get("last_updated"))
         except Exception as e:
             st.error(f"Failed to initialize Storage Service: {e}")
+
+    if "supabase_service" not in st.session_state:
+        st.session_state.supabase_service = SupabaseStorage()
 
     hydrate_keys(storage)
 

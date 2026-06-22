@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timezone
 
 import streamlit as st
 
@@ -77,31 +78,95 @@ def login_screen():
             </p>
         """, unsafe_allow_html=True)
 
+
+def render_sidebar_subscription_logic():
+    status = st.session_state.get("user_status", {})
+    tier = status.get("tier")
+    
+    with st.sidebar:
+        # --- ◈ FREE TIER VIEW ◈ ---
+        if tier == "free":
+            remaining = status.get("remaining_searches", 0)
+            percent_left = remaining / 3
+            st.progress(value=percent_left, text=f"{remaining}/3 searches left")
+            st.caption("Free access is limited to 1 CV and 3 daily searches.")
+            
+            st.link_button(
+                "Unlock Unlimited Access", 
+                st.secrets.STRIPE_LINK,
+                use_container_width=True,
+                type="primary"
+            )
+        
+        elif tier == "trial":
+            end_date_str = status.get("trial_end") 
+            if end_date_str:
+                end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                delta = end_date - now
+                days_left = max(0, delta.days)
+
+                countdown_text = f"{days_left} Days Remaining" if days_left > 0 else "Expires Today"
+
+                st.markdown(f"""
+                    <div style="border-left: 3px solid #C5A267; padding-left: 15px; margin: 20px 0 10px 0;">
+                        <p style="color: #C5A267; font-size: 11px; letter-spacing: 0.1em; margin: 0; font-weight: 600;">PREMIUM ACCESS</p>
+                        <p style="font-size: 18px; font-weight: 400; margin: 0; color: #E2E8F0;">{countdown_text}</p>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                if days_left <= 2:
+                    st.caption("Your trial period is concluding. Lock in Pro access below.")
+                
+                st.link_button(
+                    "Upgrade to Pro", 
+                    st.secrets.STRIPE_LINK, 
+                    use_container_width=True,
+                    type="primary"
+                )
+
+        # --- ◈ PRO TIER VIEW ◈ ---
+        elif tier == "pro":
+            st.markdown("""
+                <div style="border: 1px solid #C5A267; padding: 10px; border-radius: 2px; text-align: center; background-color: rgba(197, 162, 103, 0.05);">
+                    <p style="color: #C5A267; font-size: 11px; letter-spacing: 0.2em; margin: 0; font-weight: 700;">◈ PRO MEMBER ◈</p>
+                </div>
+            """, unsafe_allow_html=True)
+
 def sidebar_handler():
     """
     Handles the global sidebar interface for CV uploads.
     Returns the uploaded file object if a new one is provided.
     """
+    render_sidebar_subscription_logic()
+    status = st.session_state.get("user_status", {"tier": "free", "has_cv": False})
+    tier = status.get("tier")
+    has_full_access = tier in ["pro", "trial"]
+    has_cv = status.get("has_cv", False)
+
     with st.sidebar:
         st.header("CV Management")
-        st.caption("Upload a new CV.")
 
-        new_cv = st.file_uploader(
-            "Upload CV (PDF, DOCX)",
-            type=["pdf", "docx"],
-            help="Your CV will be parsed and matched against live job markets.",
-        )
+        if has_full_access or not has_cv:
+            st.caption("Upload a new CV.")
 
-        if new_cv:
-            try:
-                with st.spinner("Extracting text..."):
-                    st.session_state["raw_cv_text"] = get_cv_text(new_cv, st.session_state.last_updated)
-                    st.success("CV Read successfully!")
-            except Exception as e:
-                st.error(f"Failed to convert CV: {e}")
+            new_cv = st.file_uploader(
+                "Upload CV (PDF, DOCX)",
+                type=["pdf", "docx"],
+                help="Your CV will be parsed and matched against live job markets.",
+            )
 
-        return new_cv
+            if new_cv:
+                try:
+                    with st.spinner("Extracting text..."):
+                        st.session_state["raw_cv_text"] = get_cv_text(new_cv, st.session_state.last_updated)
+                        st.success("CV Read successfully!")
+                except Exception as e:
+                    st.error(f"Failed to convert CV: {e}")
 
+            return new_cv
+        else:
+            st.write("Upgrade to The Slate PRO to add more CVs")
 
 def profile_selector(storage, user_id):
     """

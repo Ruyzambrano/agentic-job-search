@@ -69,6 +69,7 @@ async def cv_parser_node(state: AgentState, config: RunnableConfig) -> Dict[str,
     cv_data: CandidateProfile = result["structured_response"]
 
     log_message("Parsing complete. Persisting profile...")
+    
     new_id = storage.save_candidate_profile(user_id, cv_data)
 
     return {"cv_data": cv_data, "active_profile_id": new_id}

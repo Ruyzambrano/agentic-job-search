@@ -143,6 +143,13 @@ def main():
         return
     else:
         init_app()
+        if st.user:
+            user_email = st.user.email if st.user else "local@local.com"
+            user_id = st.user.sub
+            supabase_service = st.session_state.supabase_service
+            supabase_service.provision_user(user_id, user_email)
+            st.session_state.user_status = supabase_service.get_user_status(user_id)
+            st.write(st.session_state.user_status)
         pages = {
             "Jobs":
                 [

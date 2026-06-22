@@ -7,6 +7,7 @@ import streamlit as st
 
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
+from supabase import create_client, Client
 
 from src.schema import (
     CandidateProfile,
