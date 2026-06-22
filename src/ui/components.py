@@ -597,12 +597,12 @@ def render_api_settings(storage: LocalStorage):
     with col1:
         with st.container(border=True):
             new_use_reed = st.toggle("Enable Reed", value=api.use_reed)
-            new_reed_key = st.text_input(
-                "Reed API Key",
-                type="password",
-                value=api.reed_key,
-                disabled=not new_use_reed,
-            ).strip()
+            # new_reed_key = st.text_input(
+            #     "Reed API Key",
+            #     type="password",
+            #     value=api.reed_key,
+            #     disabled=not new_use_reed,
+            # ).strip()
 
         with st.container(border=True):
             new_use_google = st.toggle("Enable Google (SerpAPI)", value=api.use_google)
@@ -655,9 +655,9 @@ def render_api_settings(storage: LocalStorage):
         st.session_state.changed_rapid_api = set_new_key(
             "rapidapi_key", new_rapidapi_key, storage, "api_settings"
             )
-        st.session_state.changed_reed = set_new_key(
-            "reed_key", new_reed_key, storage, "api_settings"
-        )
+        # st.session_state.changed_reed = set_new_key(
+        #     "reed_key", new_reed_key, storage, "api_settings"
+        # )
         st.session_state.changed_indeed = set_new_key(
             "indeed_key", new_hasdata_key, storage, "api_settings"
         )

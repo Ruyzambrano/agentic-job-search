@@ -93,7 +93,6 @@ def hydrate_keys(storage):
         "serpapi_key",
         "ai_provider",
         "rapidapi_key",
-        "reed_key",
         "use_google",
         "use_linkedin",
         "use_reed",
@@ -116,7 +115,7 @@ def hydrate_keys(storage):
         if new_val is not None and new_val != old_val:
             new_data_found = True
             setattr(st.session_state.pipeline_settings.api_settings, k, new_val)
-
+    st.session_state.pipeline_settings.api_settings.reed_key = st.secrets.REED_API_KEY
     if new_data_found:
         st.rerun()
 
