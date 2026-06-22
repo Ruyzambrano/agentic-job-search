@@ -701,15 +701,15 @@ def render_settings_page():
     storage = get_local_storage()
     storage_service = st.session_state.storage_service
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["Logic", "Scraping", "Database", "API"]
+        ["API", "Scraping", "Database", "Logic"]
     )
-    with tab1:
+    with tab4:
         scoring_weights_setting_tab(storage)
     with tab2:
         scraping_settings_tab(storage)
     with tab3:
         vector_storage_setting_tab(storage_service)
-    with tab4:
+    with tab1:
         render_api_settings(storage)
 
 
@@ -792,12 +792,12 @@ def add_sidebar_support():
 
 def show_how():
     """Redirects users to setup or info pages if keys are missing."""
-    st.image("https://img.icons8.com/layers/100/000000/empty-box.png", width=100)
+    st.image("assets/slate_full_logo.svg")
     st.title("Ready to start your research?")
-    st.subheader("The pipeline is currently dormant.")
+
     
     st.info("""
-    **Notice:** This is a **Bring Your Own Key (BYOK)** tool. 
+    This is a **Bring Your Own Key (BYOK)** tool. 
     To protect your privacy and ensure dedicated performance, you must provide your own LLM and Search API keys.
     """)
 
